@@ -58,8 +58,19 @@ describe("scene contract", () => {
     ["pointer out of range", { ...base, elements: [{ type: "array", id: "a", cells: [{ id: "c0", value: 1 }], pointers: [{ id: "p", label: "low", index: 1 }] }] }],
     ["table row width mismatch", { ...base, elements: [{ type: "table", id: "tb", columns: ["a", "b"], rows: [{ id: "r", cells: [1] }] }] }],
     ["id with markup", { ...base, elements: [{ type: "text", id: "<img onerror=x>", text: "a" }] }],
+    ["unknown focus id", { ...base, focus: ["ghost"] }],
     ["nested groups", { ...base, elements: [{ type: "group", id: "g", children: [{ type: "group", id: "g2", children: [] }] }] }],
   ])("rejects %s", (_name, scene) => {
     expect(() => parseScene(scene)).toThrow();
+  });
+});
+
+describe("every engine step tells the canvas what to point at", () => {
+  it("has at least one valid focus target per step", async () => {
+    const { CAPABILITIES } = await import("@/lib/registry");
+    for (const cap of CAPABILITIES) {
+      const lesson = cap.build(cap.defaultParams);
+      for (const step of lesson.steps) expect(step.scene.focus.length).toBeGreaterThan(0);
+    }
   });
 });

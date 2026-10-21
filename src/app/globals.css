@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+@theme inline {
+  --font-hand: var(--font-caveat), "Segoe Print", "Bradley Hand", cursive;
+}
+
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
@@ -9,6 +13,10 @@
   --arrow-compare: #d97706;
   --arrow-success: #059669;
   --arrow-warning: #e11d48;
+  --board: #fbfbf8;
+  --board-dot: #d6d3cb;
+  --teacher-ink: #db2777;
+  --note: #fef3a0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,6 +29,10 @@
     --arrow-compare: #fbbf24;
     --arrow-success: #34d399;
     --arrow-warning: #fb7185;
+    --board: #0f1720;
+    --board-dot: #2a3644;
+    --teacher-ink: #f472b6;
+    --note: #fde68a;
   }
 }
 
@@ -28,6 +40,27 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.board-grid {
+  background-color: var(--board);
+  background-image: radial-gradient(circle, var(--board-dot) 1.2px, transparent 1.3px);
+}
+
+.note-paper {
+  background: var(--note);
+  background-image: linear-gradient(transparent 31px, rgb(0 0 0 / 0.05) 32px);
+  background-size: 100% 32.5px;
+}
+
+/* Marker strokes that "draw themselves" (path must set pathLength=1). */
+.draw-on {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-on 700ms 150ms ease-out forwards;
+}
+@keyframes draw-on {
+  to { stroke-dashoffset: 0; }
 }
 
 .scene-fade-in {
@@ -39,6 +72,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .draw-on { stroke-dashoffset: 0; animation: none; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;

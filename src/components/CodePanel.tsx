@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { CodeArtifact } from "@/lib/lesson/schema";
 
-export function CodePanel({ code, highlight }: { code: CodeArtifact; highlight: number[] }) {
+export function CodePanel({ code, highlight, tall = false }: { code: CodeArtifact; highlight: number[]; tall?: boolean }) {
   const lines = code.source.split("\n");
   const active = new Set(highlight);
   const listRef = useRef<HTMLOListElement>(null);
@@ -20,12 +20,12 @@ export function CodePanel({ code, highlight }: { code: CodeArtifact; highlight: 
   }, [highlight]);
 
   return (
-    <figure className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 text-slate-100 dark:border-slate-800" data-testid="code-panel">
+    <figure className={`flex min-h-0 flex-col overflow-hidden rounded-xl ${tall ? "h-full" : ""} border border-slate-200 bg-slate-950 text-slate-100 dark:border-slate-800`} data-testid="code-panel">
       <figcaption className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs text-slate-400">
         <span>{code.language === "text" ? "outline" : code.language}</span>
         <span>{highlight.length ? `line ${highlight.join(", ")}` : ""}</span>
       </figcaption>
-      <ol ref={listRef} className="relative max-h-[22rem] overflow-auto py-2 font-mono text-[13px] leading-6">
+      <ol ref={listRef} className={`relative min-h-0 overflow-auto py-2 font-mono leading-7 ${tall ? "flex-1 text-[15px]" : "max-h-[22rem] text-[13px]"}`}>
         {lines.map((line, i) => {
           const n = i + 1;
           const on = active.has(n);

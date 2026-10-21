@@ -7,9 +7,8 @@ import { initPlayback, playbackReducer } from "@/lib/lesson/runtime";
 import { buildLesson, getCapability } from "@/lib/registry";
 import { BinarySearchParamsSchema } from "@/lib/engines/binary-search";
 import { DEFAULT_SQL_JOIN } from "@/lib/engines/sql-join";
-import { SceneRenderer } from "./SceneRenderer";
 import { CodePanel } from "./CodePanel";
-import { CheckpointCard } from "./CheckpointCard";
+import { TeachingCanvas } from "./TeachingCanvas";
 import { PlaybackControls } from "./PlaybackControls";
 
 type Source =
@@ -39,6 +38,7 @@ export function Workspace({ initialLesson }: { initialLesson: Lesson }) {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"canvas" | "editor">("canvas");
   const abortRef = useRef<AbortController | null>(null);
 
   const step = lesson.steps[Math.min(pb.index, lesson.steps.length - 1)];
@@ -129,72 +129,75 @@ export function Workspace({ initialLesson }: { initialLesson: Lesson }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 px-4 pt-6 pb-28 sm:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">AI Visual Tutor</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">See the concept happen — code, picture and explanation move together.</p>
-        </div>
-        <ModeBadge status={status} />
-      </header>
-
-      <section aria-label="Choose a lesson" className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <form onSubmit={askTutor} className="flex flex-col gap-2 sm:flex-row">
-          <label htmlFor="topic" className="sr-only">
-            What do you want to learn?
-          </label>
-          <input
-            id="topic"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            maxLength={500}
-            placeholder='Ask the tutor, e.g. "binary search for 7 in [1, 3, 5, 7, 9]" or "explain a LEFT JOIN"'
-            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700"
-          />
-          <button type="submit" disabled={loading || prompt.trim().length < 2} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50">
-            {loading ? "Planning…" : "Teach me"}
-          </button>
-        </form>
+    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
+      <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-4 dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-500">Examples:</span>
+          <h1 className="mr-2 hidden text-base font-bold tracking-tight whitespace-nowrap sm:block">AI Visual Tutor</h1>
+          <form onSubmit={askTutor} className="flex min-w-0 flex-1 basis-80 gap-2">
+            <label htmlFor="topic" className="sr-only">
+              What do you want to learn?
+            </label>
+            <input
+              id="topic"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              maxLength={500}
+              placeholder='What should I teach? e.g. "binary search for 7 in [1, 3, 5, 7, 9]"'
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700"
+            />
+            <button type="submit" disabled={loading || prompt.trim().length < 2} className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold whitespace-nowrap text-white hover:bg-sky-700 disabled:opacity-50">
+              {loading ? "Planning…" : "Teach me"}
+            </button>
+          </form>
+          <ModeBadge status={status} />
+        </div>
+        <div className="flex items-center gap-1.5">
+        <div className="-mx-1 flex min-w-0 items-center gap-1.5 overflow-x-auto px-1 pb-0.5 whitespace-nowrap sm:flex-wrap sm:overflow-visible">
+          <span className="text-xs text-slate-500">Try:</span>
           {QUICK_PICKS.map((q) => (
             <button
               key={q.label}
               type="button"
               onClick={() => loadLesson(q.build(), { kind: "builtin" })}
-              className="rounded-full border border-slate-300 px-3 py-1 text-xs font-medium hover:border-sky-500 hover:text-sky-700 dark:border-slate-700 dark:hover:text-sky-300"
+              className="shrink-0 rounded-full border border-slate-300 px-2.5 py-0.5 text-xs font-medium hover:border-sky-500 hover:text-sky-700 dark:border-slate-700 dark:hover:text-sky-300"
             >
               {q.label}
             </button>
           ))}
         </div>
-        <BinarySearchEditor onBuild={(l) => loadLesson(l, { kind: "custom" })} />
+          <BinarySearchEditor onBuild={(l) => loadLesson(l, { kind: "custom" })} />
+        </div>
         {error && (
-          <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
+          <p role="alert" className="rounded-lg bg-rose-50 px-3 py-1.5 text-sm text-rose-800 dark:bg-rose-950 dark:text-rose-200">
             {error}
           </p>
         )}
-      </section>
-
-      <LessonHeader lesson={lesson} source={source} />
-
-      <div className="grid gap-5 lg:grid-cols-12">
-        <section aria-label="Visual" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-7 lg:sticky lg:top-4 lg:self-start dark:border-slate-800 dark:bg-slate-900">
-          <SceneRenderer scene={step.scene} />
-        </section>
-
-        <div className="flex min-w-0 flex-col gap-5 lg:col-span-5">
-          <section aria-label="Explanation" aria-live="polite" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900" data-testid="narration">
-            <p className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
-              Step {pb.index + 1} of {lesson.steps.length} · {step.objective}
-            </p>
-            <p className="mt-2 leading-relaxed">{step.narration}</p>
-          </section>
-          {step.checkpoint && <CheckpointCard key={`${lesson.id}:${step.id}`} checkpoint={step.checkpoint} />}
-          <CodePanel code={lesson.code} highlight={step.highlightLines} />
-          <StateInspector state={step.state} />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <LessonHeader lesson={lesson} source={source} />
+          <div role="tablist" aria-label="View" className="ml-auto flex rounded-lg border border-slate-300 p-0.5 text-sm dark:border-slate-700">
+            {(["canvas", "editor"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+                className={`rounded-md px-3 py-1 font-medium capitalize ${view === v ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900" : "text-slate-600 dark:text-slate-300"}`}
+              >
+                {v === "canvas" ? "✎ Canvas" : "</> Editor"}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </header>
+
+      <main className="relative min-h-0 flex-1">
+        {view === "canvas" ? (
+          <TeachingCanvas key={lesson.id} lesson={lesson} step={step} index={pb.index} onOpenEditor={() => setView("editor")} />
+        ) : (
+          <EditorView lesson={lesson} step={step} index={pb.index} onOpenCanvas={() => setView("canvas")} />
+        )}
+      </main>
 
       <PlaybackControls
         index={pb.index}
@@ -204,6 +207,27 @@ export function Workspace({ initialLesson }: { initialLesson: Lesson }) {
         onPauseAtQuestions={setPauseAtQuestions}
         dispatch={dispatch}
       />
+    </div>
+  );
+}
+
+/** The code editor is a separate surface; it follows the same active step as the canvas. */
+function EditorView({ lesson, step, index, onOpenCanvas }: { lesson: Lesson; step: Lesson["steps"][number]; index: number; onOpenCanvas: () => void }) {
+  return (
+    <div className="grid h-full min-h-0 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <CodePanel code={lesson.code} highlight={step.highlightLines} tall />
+      <aside className="flex min-h-0 flex-col gap-3 overflow-auto">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900" data-testid="editor-step">
+          <p className="text-xs font-semibold tracking-wide text-sky-700 uppercase dark:text-sky-300">
+            Step {index + 1} of {lesson.steps.length} · {step.objective}
+          </p>
+          <p className="mt-2 leading-relaxed">{step.narration}</p>
+          <button type="button" onClick={onOpenCanvas} className="mt-3 text-xs font-semibold text-sky-700 hover:underline dark:text-sky-300">
+            ← See it on the canvas
+          </button>
+        </section>
+        <StateInspector state={step.state} />
+      </aside>
     </div>
   );
 }
@@ -225,41 +249,44 @@ function ModeBadge({ status }: { status: Status }) {
 
 function LessonHeader({ lesson, source }: { lesson: Lesson; source: Source }) {
   const verified = lesson.fidelity === "verified";
+  const intro = "intro" in source && source.intro ? source.intro : lesson.summary;
   return (
-    <section aria-label="Lesson" className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold" data-testid="lesson-title">
-          {lesson.title}
-        </h2>
-        <span
-          data-testid="fidelity-badge"
-          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${verified ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"}`}
-          title={verified ? "Every step is computed by a deterministic engine" : "A sketch for explanation — not computed by a simulator"}
-        >
-          {verified ? "Verified simulation" : "Illustrative sketch"}
-        </span>
-        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          {source.kind === "live" ? `Planned by live AI${source.model ? ` (${source.model})` : ""}` : source.kind === "mock" ? "Demo fixture (no live AI)" : source.kind === "custom" ? "Your input" : "Built-in example"}
-        </span>
-      </div>
-      <p className="text-sm text-slate-600 dark:text-slate-300">{"intro" in source && source.intro ? source.intro : lesson.summary}</p>
-      {"notices" in source && source.notices.length > 0 && (
-        <ul className="text-xs text-amber-800 dark:text-amber-300">
-          {source.notices.map((n) => (
-            <li key={n}>⚠ {n}</li>
-          ))}
-        </ul>
-      )}
-      {lesson.assumptions.length > 0 && (
-        <details className="text-xs text-slate-500 dark:text-slate-400">
-          <summary className="cursor-pointer select-none">Assumptions &amp; limits</summary>
-          <ul className="mt-1 list-disc pl-5">
-            {lesson.assumptions.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-        </details>
-      )}
+    <section aria-label="Lesson" className="flex min-w-0 flex-wrap items-center gap-2">
+      <h2 className="text-base font-semibold" data-testid="lesson-title">
+        {lesson.title}
+      </h2>
+      <span
+        data-testid="fidelity-badge"
+        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${verified ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200" : "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"}`}
+        title={verified ? "Every step is computed by a deterministic engine" : "A sketch for explanation — not computed by a simulator"}
+      >
+        {verified ? "Verified simulation" : "Illustrative sketch"}
+      </span>
+      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        {source.kind === "live" ? `Planned by live AI${source.model ? ` (${source.model})` : ""}` : source.kind === "mock" ? "Demo fixture (no live AI)" : source.kind === "custom" ? "Your input" : "Built-in example"}
+      </span>
+      {"notices" in source &&
+        source.notices.map((n) => (
+          <span key={n} className="text-xs text-amber-800 dark:text-amber-300">
+            ⚠ {n}
+          </span>
+        ))}
+      <details className="relative text-xs text-slate-600 dark:text-slate-300">
+        <summary className="cursor-pointer select-none hover:text-sky-700">About this lesson</summary>
+        <div className="absolute top-6 left-0 z-30 w-[min(28rem,85vw)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          <p className="text-sm">{intro}</p>
+          {lesson.assumptions.length > 0 && (
+            <>
+              <p className="mt-3 font-semibold">Assumptions &amp; limits</p>
+              <ul className="mt-1 list-disc pl-5">
+                {lesson.assumptions.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      </details>
     </section>
   );
 }
@@ -303,9 +330,9 @@ function BinarySearchEditor({ onBuild }: { onBuild: (l: Lesson) => void }) {
   }
 
   return (
-    <details className="text-sm">
-      <summary className="cursor-pointer select-none text-xs font-medium text-slate-600 dark:text-slate-300">Try your own binary search input</summary>
-      <form onSubmit={submit} className="mt-2 flex flex-wrap items-end gap-2">
+    <details className="relative shrink-0 text-sm">
+      <summary className="cursor-pointer rounded-full border border-dashed border-slate-400 px-2.5 py-0.5 text-xs font-medium text-slate-600 select-none dark:text-slate-300"><span className="sm:hidden">Your input…</span><span className="hidden sm:inline">Your own binary search…</span></summary>
+      <form onSubmit={submit} className="absolute top-8 right-0 z-30 flex w-[min(26rem,90vw)] sm:right-auto sm:left-0 flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <label className="flex min-w-48 flex-1 flex-col text-xs">
           Sorted values
           <input value={values} onChange={(e) => setValues(e.target.value)} className="mt-1 rounded-lg border border-slate-300 bg-transparent px-2 py-1.5 font-mono text-sm dark:border-slate-700" />

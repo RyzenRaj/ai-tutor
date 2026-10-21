@@ -1,6 +1,6 @@
 # AI Visual Tutor
 
-A workspace where a learner picks (or asks for) a technical concept and sees it happen: code with highlighted lines, an animated visual, a plain-language explanation, and check-yourself questions — all driven by the **same active lesson step**.
+A teaching **canvas**: pick (or ask for) a technical concept and the tutor teaches it on a whiteboard — drawing the concept, writing each explanation as a note, circling what it's talking about, asking check-yourself questions, and animating every step. The full code lives in a separate **Editor** tab. Canvas and editor follow the **same active lesson step**.
 
 Status: binary search, SQL JOIN (INNER/LEFT) and a simplified Spark shuffle work end to end as **verified simulations**; other topics get an **illustrative whiteboard**. OpenRouter is wired behind a provider interface; without a key the app runs in a clearly labeled demo mode. Auth/persistence is planned, not built. See [`docs/implementation-plan.md`](docs/implementation-plan.md).
 
@@ -17,7 +17,8 @@ cp .env.example .env.local   # optional — add OPENROUTER_API_KEY for live AI
 npm run dev                  # http://localhost:3000
 ```
 
-Keyboard: `←` / `→` step, `Space` play/pause, `R` replay.
+Keyboard: `←` / `→` step, `Space` play/pause, `R` replay, `+` / `−` zoom, `0` fit.
+Canvas: drag to pan (hand tool), scroll to pan, Ctrl/⌘ + scroll or pinch to zoom; pen, highlighter and eraser for your own notes.
 
 ## Environment variables (server-side only)
 
@@ -59,6 +60,8 @@ src/lib/engines/*            Deterministic concept engines + whiteboard fallback
 src/lib/registry.ts          Capability registry
 src/lib/ai/*                 Provider interface, OpenRouter provider, planner
 src/app/api/lesson           POST {prompt} → validated lesson
-src/components/*             Workspace, SceneRenderer (FLIP + arrows), CodePanel, controls
+src/components/TeachingCanvas  Board: pan/zoom, teacher note + arrow, focus ring, learner ink
+src/components/*             Workspace (Canvas | Editor), SceneRenderer (FLIP + arrows), CodePanel, controls
+src/app/fonts/               Caveat handwriting font (SIL OFL), bundled locally
 docs/                        Brief, architecture, scene contract, plan, ADRs
 ```

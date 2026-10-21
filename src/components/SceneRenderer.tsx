@@ -9,54 +9,83 @@ import { toneStroke, toneSurface, toneText } from "./tones";
  * Elements with the same id across steps are the same DOM node, so movement is
  * animated with FLIP (measure → invert → play). Respects prefers-reduced-motion.
  */
-export function SceneRenderer({ scene }: { scene: Scene }) {
+export type LocalRect = { x: number; y: number; w: number; h: number };
+
+/** Ratio between on-screen size and layout size (the canvas zooms with a CSS transform). */
+function zoomOf(el: HTMLElement): number {
+  const k = el.getBoundingClientRect().width / (el.offsetWidth || 1);
+  return Number.isFinite(k) && k > 0 ? k : 1;
+}
+
+export function SceneRenderer({ scene, onFocusRect }: { scene: Scene; onFocusRect?: (rect: LocalRect | null) => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const prevRects = useRef(new Map<string, { x: number; y: number }>());
   const [paths, setPaths] = useState<ArrowPath[]>([]);
+  const [ring, setRing] = useState<LocalRect | null>(null);
+  const onFocusRef = useRef(onFocusRect);
+  useLayoutEffect(() => {
+    onFocusRef.current = onFocusRect;
+  }, [onFocusRect]);
 
-  const measureArrows = useCallback(() => {
+  // Measure arrows and the focus target. Must run before FLIP animations start,
+  // because running transform animations change getBoundingClientRect().
+  const measure = useCallback(() => {
     const root = rootRef.current;
     if (!root) return;
-    setPaths(computeArrowPaths(root, scene));
+    const k = zoomOf(root);
+    setPaths(computeArrowPaths(root, scene, k));
+    const focusEl = scene.focus[0] ? root.querySelector<HTMLElement>(`[data-scene-id="${CSS.escape(scene.focus[0])}"]`) : null;
+    let rect: LocalRect | null = null;
+    if (focusEl) {
+      const b = root.getBoundingClientRect();
+      const r = focusEl.getBoundingClientRect();
+      rect = { x: (r.left - b.left) / k, y: (r.top - b.top) / k, w: r.width / k, h: r.height / k };
+    }
+    setRing(rect);
+    onFocusRef.current?.(rect);
   }, [scene]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    measure();
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const k = zoomOf(root);
     const base = root.getBoundingClientRect();
     const next = new Map<string, { x: number; y: number }>();
-    root.querySelectorAll<HTMLElement>("[data-flip]").forEach((el) => {
-      const id = el.dataset.flip!;
+    const els = Array.from(root.querySelectorAll<HTMLElement>("[data-flip]"));
+    // Read all positions first, then start animations (no layout thrash, no skew).
+    const positions = els.map((el) => {
       const r = el.getBoundingClientRect();
-      const pos = { x: r.left - base.left, y: r.top - base.top };
-      next.set(id, pos);
-      if (reduce || typeof el.animate !== "function") return;
+      return { el, id: el.dataset.flip!, x: (r.left - base.left) / k, y: (r.top - base.top) / k };
+    });
+    for (const { el, id, x, y } of positions) {
+      next.set(id, { x, y });
+      if (reduce || typeof el.animate !== "function") continue;
       const prev = prevRects.current.get(id);
       if (prev) {
-        const dx = prev.x - pos.x;
-        const dy = prev.y - pos.y;
+        const dx = prev.x - x;
+        const dy = prev.y - y;
         if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
           el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }], {
-            duration: 550,
+            duration: 650,
             easing: "cubic-bezier(.2,.8,.2,1)",
           });
         }
       } else if (prevRects.current.size > 0) {
         el.animate([{ opacity: 0, transform: "scale(0.85)" }, { opacity: 1, transform: "scale(1)" }], { duration: 300, easing: "ease-out" });
       }
-    });
+    }
     prevRects.current = next;
-    measureArrows();
-  }, [scene, measureArrows]);
+  }, [scene, measure]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => measureArrows());
+    const ro = new ResizeObserver(() => measure());
     ro.observe(root);
     return () => ro.disconnect();
-  }, [measureArrows]);
+  }, [measure]);
 
   return (
     <div ref={rootRef} className="relative min-w-0" data-testid="scene" data-fidelity={scene.fidelity}>
@@ -73,11 +102,24 @@ export function SceneRenderer({ scene }: { scene: Scene }) {
             </marker>
           ))}
         </defs>
+        {ring && (
+          <path
+            key={`${scene.focus[0]}:${ring.x}:${ring.y}`}
+            data-testid="focus-ring"
+            d={roughRect(ring, 7)}
+            fill="none"
+            stroke="var(--teacher-ink)"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            pathLength={1}
+            className="draw-on"
+          />
+        )}
         {paths.map((p) => (
           <g key={p.id} className="scene-fade-in">
             <path d={p.d} fill="none" stroke={toneStroke[p.tone]} strokeWidth={2} markerEnd={`url(#arrowhead-${p.tone})`} />
             {p.label && (
-              <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle" className="fill-slate-700 text-[11px] font-semibold dark:fill-slate-200" paintOrder="stroke" stroke="var(--background)" strokeWidth={4}>
+              <text x={p.lx} y={p.ly} textAnchor="middle" dominantBaseline="middle" className="fill-slate-700 text-[11px] font-semibold dark:fill-slate-200" paintOrder="stroke" stroke="var(--board)" strokeWidth={4}>
                 {p.label}
               </text>
             )}
@@ -90,6 +132,24 @@ export function SceneRenderer({ scene }: { scene: Scene }) {
       </p>
     </div>
   );
+}
+
+/** A slightly wobbly rounded rectangle, like a marker circling something on a whiteboard. */
+export function roughRect(r: LocalRect, pad: number): string {
+  const x0 = r.x - pad, y0 = r.y - pad, x1 = r.x + r.w + pad, y1 = r.y + r.h + pad;
+  const c = Math.min(14, (y1 - y0) / 2, (x1 - x0) / 2);
+  const j = 2.5; // deterministic wobble
+  return [
+    `M${x0 + c},${y0 + 1}`,
+    `Q${(x0 + x1) / 2},${y0 - j} ${x1 - c},${y0}`,
+    `Q${x1 + 1},${y0 - 1} ${x1},${y0 + c}`,
+    `Q${x1 + j},${(y0 + y1) / 2} ${x1 - 1},${y1 - c}`,
+    `Q${x1},${y1 + 1} ${x1 - c},${y1}`,
+    `Q${(x0 + x1) / 2},${y1 + j} ${x0 + c},${y1 - 1}`,
+    `Q${x0 - 1},${y1} ${x0},${y1 - c}`,
+    `Q${x0 - j},${(y0 + y1) / 2} ${x0 + 1},${y0 + c}`,
+    `Q${x0},${y0 - 2} ${x0 + c + 10},${y0 - 1}`,
+  ].join(" ");
 }
 
 function ElementView({ el }: { el: SceneElement }) {
@@ -239,8 +299,11 @@ function TableView({ el }: { el: Extract<LeafElement, { type: "table" }> }) {
 
 type ArrowPath = { id: string; d: string; tone: Tone; label?: string; lx: number; ly: number };
 
-function computeArrowPaths(root: HTMLElement, scene: Scene): ArrowPath[] {
-  const base = root.getBoundingClientRect();
+function computeArrowPaths(root: HTMLElement, scene: Scene, k: number): ArrowPath[] {
+  const b = root.getBoundingClientRect();
+  // Work in unzoomed, root-local coordinates.
+  const toLocal = (r: DOMRect) => new DOMRect((r.left - b.left) / k, (r.top - b.top) / k, r.width / k, r.height / k);
+  const base = { left: 0, top: 0 };
   const find = (id: string) => root.querySelector<HTMLElement>(`[data-scene-id="${CSS.escape(id)}"]`);
   type Resolved = { a: Scene["arrows"][number]; f: DOMRect; t: DOMRect; vertical: boolean; down: boolean; right: boolean };
   const resolved: Resolved[] = [];
@@ -248,8 +311,8 @@ function computeArrowPaths(root: HTMLElement, scene: Scene): ArrowPath[] {
     const fromEl = find(a.from);
     const toEl = find(a.to);
     if (!fromEl || !toEl) continue;
-    const f = fromEl.getBoundingClientRect();
-    const t = toEl.getBoundingClientRect();
+    const f = toLocal(fromEl.getBoundingClientRect());
+    const t = toLocal(toEl.getBoundingClientRect());
     // Stacked boxes (no vertical overlap) connect top/bottom; side-by-side boxes connect left/right.
     const vertical = t.top >= f.bottom - 1 || f.top >= t.bottom - 1;
     resolved.push({ a, f, t, vertical, down: t.top >= f.bottom - 1, right: t.left + t.width / 2 > f.left + f.width / 2 });

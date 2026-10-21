@@ -19,6 +19,8 @@ Scene = {
   layout: "row" | "column",          // top-level flow
   elements: SceneElement[],          // 1–16
   arrows: { id, from, to, label?, tone }[],  // ids of any element/cell/row/chip
+  focus: string[],                   // ids the tutor is talking about (≤4); the canvas circles
+                                     // focus[0] and draws its note's arrow to it
   caption?: string,
 }
 SceneElement =
@@ -30,12 +32,14 @@ SceneElement =
   | { type: "group", id, title?, direction, children: <non-group element>[] }    // one nesting level
 ```
 
-Invariants enforced by the schema: ids unique across the whole scene and limited to `[A-Za-z0-9_\-:.]`; arrows reference existing ids; pointer index within the array; table rows match column count; size limits on every list and string.
+Invariants enforced by the schema: focus ids exist; ids unique across the whole scene and limited to `[A-Za-z0-9_\-:.]`; arrows reference existing ids; pointer index within the array; table rows match column count; size limits on every list and string.
 
 ## Renderer contract (`SceneRenderer`)
 
 - Lays out elements with CSS flex/grid; arrows are an SVG overlay measured from rendered element boxes (`data-scene-id`). Stacked boxes connect top→bottom, side-by-side boxes left→right; multiple arrows per element are spread out; labels are dropped on very short arrows.
 - FLIP animation for `data-flip` nodes (chips, pointers, rows, boxes); disabled under `prefers-reduced-motion`.
+- Measures before animating (running transforms distort `getBoundingClientRect`), and divides by the canvas zoom so geometry is in unzoomed board units.
+- Circles `focus[0]` with a hand-drawn ring and reports its rectangle to the canvas for the teacher's arrow.
 - Provides an `aria-live` text summary of pointers/status for screen readers.
 
 ## Used by

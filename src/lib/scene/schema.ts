@@ -141,6 +141,8 @@ export const SceneSchema = z
     layout: z.enum(["row", "column"]).default("column"),
     elements: z.array(SceneElementSchema).min(1).max(16),
     arrows: z.array(ArrowSchema).max(40).default([]),
+    /** Ids the tutor is talking about on this step; the canvas points its note at the first one. */
+    focus: z.array(Id).max(4).default([]),
     caption: Label.optional(),
   })
   .superRefine((scene, ctx) => {
@@ -153,6 +155,9 @@ export const SceneSchema = z
     for (const a of scene.arrows) {
       if (!seen.has(a.from)) ctx.addIssue({ code: "custom", message: `Arrow ${a.id}: unknown from "${a.from}"` });
       if (!seen.has(a.to)) ctx.addIssue({ code: "custom", message: `Arrow ${a.id}: unknown to "${a.to}"` });
+    }
+    for (const f of scene.focus) {
+      if (!seen.has(f)) ctx.addIssue({ code: "custom", message: `Unknown focus id "${f}"` });
     }
     for (const el of flatten(scene.elements)) {
       if (el.type === "array") {

@@ -8,8 +8,10 @@ Modular monolith: one Next.js (App Router) app. No microservices or multi-agent 
           │   │  quick picks / custom input│  │  (engines are pure TS, so built-in
           │   │  build lessons locally ────┼──┼── examples run without a server call)
           │   ▼                            │  │
-          │ Lesson (validated) ─► active step ─► SceneRenderer · CodePanel ·
-          │                                     Narration · Checkpoint · State
+          │ Lesson (validated) ─► active step ─┬─► Canvas (default): drawing, focus ring,
+          │                                    │    teacher note + arrow, question, variables,
+          │                                    │    current-line strip, learner ink, pan/zoom
+          │                                    └─► Editor tab: full code + highlighted lines
           └───────────────────────────────────┘
                                           │
               ┌──────── server ───────────▼───────────────┐
@@ -34,7 +36,8 @@ Modular monolith: one Next.js (App Router) app. No microservices or multi-agent 
 | `lib/registry` | Capability lookup, params schemas, defaults, deterministic topic matching | Build lessons without validating params |
 | `lib/ai/*` | Provider interface, OpenRouter transport, planning prompt, repair policy | Compute domain results; fall back to another (paid) model |
 | `app/api/*` | HTTP boundary: limits, errors, logging | Log prompts, content or secrets |
-| `components/*` | Rendering only | Trust network data without re-validating |
+| `components/TeachingCanvas` | The classroom: board layout, pan/zoom/pinch, teacher callout, learner ink (per lesson, not persisted) | Hold lesson state; compute domain facts |
+| `components/*` (others) | Rendering only; Editor view is separate from the canvas | Trust network data without re-validating |
 
 ## Key flows and failure handling
 

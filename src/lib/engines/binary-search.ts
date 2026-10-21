@@ -105,10 +105,18 @@ function sceneFor(values: readonly number[], target: number, e: TraceEvent): Sce
           ? `Search range is empty (low=${e.low} > high=${e.high})`
           : `Searching indices ${e.low}…${e.high} for ${target}`;
 
+  let focus: string[];
+  if (mid !== undefined && (e.kind === "mid" || e.kind === "compare" || e.kind === "found")) focus = [`cell-${mid}`];
+  else if (e.kind === "moveLow" && inRange(e.low)) focus = ["ptr-low"];
+  else if (e.kind === "moveHigh" && inRange(e.high)) focus = ["ptr-high"];
+  else if (e.kind === "init") focus = ["arr"];
+  else focus = ["status"];
+
   return {
     version: 1,
     fidelity: "verified",
     layout: "column",
+    focus,
     elements: [
       {
         type: "array",

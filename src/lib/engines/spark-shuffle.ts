@@ -112,10 +112,11 @@ export function buildSparkShuffleLesson(params: SparkShuffleParams): Lesson {
     subtitle,
     chips,
   });
-  const scene = (maps: SceneElement[], reds: SceneElement[], caption: string, arrows: Scene["arrows"] = []): Scene => ({
+  const scene = (maps: SceneElement[], reds: SceneElement[], caption: string, arrows: Scene["arrows"] = [], focus: string[] = ["stage1"]): Scene => ({
     version: 1,
     fidelity: "verified",
     layout: "column",
+    focus,
     elements: [
       { type: "group", id: "stage1", title: "Stage 1 · map side", direction: "row", children: maps },
       { type: "group", id: "stage2", title: "Stage 2 · reduce side", direction: "row", children: reds },
@@ -215,6 +216,7 @@ export function buildSparkShuffleLesson(params: SparkShuffleParams): Lesson {
       ),
       "Arrows show how many records each reducer fetched from each map task",
       flows,
+      ["stage2"],
     ),
   });
 
@@ -232,6 +234,8 @@ export function buildSparkShuffleLesson(params: SparkShuffleParams): Lesson {
       combined.map((_, i) => mapContainer(i, [], "done")),
       reduced.map((chips, j) => redContainer(j, chips.map((c) => ({ id: c.id, label: `${c.key}:${c.value}`, tone: "success" })), `${chips.length} key(s)`)),
       "Final totals, partitioned by key",
+      [],
+      ["stage2"],
     ),
   });
 

@@ -55,6 +55,7 @@ export function buildWhiteboardLesson(plan: WhiteboardPlan, capabilityId = "whit
       arrows: s.arrows
         .filter((a) => boxIds.has(a.from) && boxIds.has(a.to) && a.from !== a.to)
         .map((a, k) => ({ id: `arrow-${i}-${k}`, from: `box-${a.from}`, to: `box-${a.to}`, label: a.label, tone: "active" as const })),
+      focus: [`box-${(s.focus ?? []).find((f) => boxIds.has(f)) ?? s.boxes[0].id}`],
       caption: "Illustrative sketch — not a verified simulation",
     };
     return {

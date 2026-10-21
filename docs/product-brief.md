@@ -10,6 +10,7 @@
 
 In:
 - Synchronized lesson player: narration, highlighted code, visual scene, state inspector, checkpoints; play/pause/next/prev/replay/scrub; keyboard; reduced motion.
+- **Canvas-first**: teaching happens on a pan/zoom board (notes, focus ring + arrow, learner ink); the code editor is a separate tab synced to the same step.
 - Verified engines: binary search, SQL INNER/LEFT JOIN, simplified Spark `reduceByKey` shuffle.
 - Illustrative whiteboard fallback for other topics, clearly labeled.
 - AI planner (OpenRouter) that picks a capability and example inputs; demo mode without a key.

@@ -19,7 +19,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
   const atStart = index === 0;
   const atEnd = index >= count - 1;
   return (
-    <nav aria-label="Lesson playback" className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+    <nav aria-label="Lesson playback" className="shrink-0 border-t border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
         <button type="button" className={btn} onClick={() => dispatch({ type: "prev" })} disabled={atStart} aria-label="Previous step" title="Previous (←)">
           ‹ Prev

@@ -88,6 +88,8 @@ describe("binary search engine", () => {
         arr.cells.forEach((c, k) => {
           if (k < low || k > high) expect(c.tone).toBe("muted");
         });
+        // The canvas points at the cell being compared.
+        if (step.objective === "Pick the middle candidate" || step.objective === "Compare with the target") expect(step.scene.focus).toEqual([`cell-${mid}`]);
         // Checkpoint answer matches what the engine does next.
         if (step.checkpoint) {
           const nextKind = lesson.steps[i + 2]!.objective;

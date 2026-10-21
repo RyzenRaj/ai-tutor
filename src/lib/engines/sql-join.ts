@@ -152,10 +152,17 @@ export function buildSqlJoinLesson(params: SqlJoinParams): Lesson {
       })),
       emptyText: "No rows yet",
     };
+    const focus =
+      opts.activeLeft === undefined
+        ? [opts.outRows > 0 ? "out" : "inputs"]
+        : opts.compared && matches.length > 0
+          ? [`r-${matches[0]}`]
+          : [`l-${opts.activeLeft}`];
     return {
       version: 1,
       fidelity: "verified",
       layout: "column",
+      focus,
       elements: [
         { type: "group", id: "inputs", direction: "row", children: [leftTable, rightTable] },
         outTable,
