@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Visual Tutor
 
-## Getting Started
+A workspace where a learner picks (or asks for) a technical concept and sees it happen: code with highlighted lines, an animated visual, a plain-language explanation, and check-yourself questions — all driven by the **same active lesson step**.
 
-First, run the development server:
+Status: binary search, SQL JOIN (INNER/LEFT) and a simplified Spark shuffle work end to end as **verified simulations**; other topics get an **illustrative whiteboard**. OpenRouter is wired behind a provider interface; without a key the app runs in a clearly labeled demo mode. Auth/persistence is planned, not built. See [`docs/implementation-plan.md`](docs/implementation-plan.md).
+
+## Requirements
+
+- Node.js ≥ 20.9 and npm
+- For E2E tests: `npx playwright install chromium` (once)
+
+## Run locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # optional — add OPENROUTER_API_KEY for live AI
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Keyboard: `←` / `→` step, `Space` play/pause, `R` replay.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment variables (server-side only)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Default | Notes |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | Empty → demo mode (deterministic fixtures, labeled in the UI). |
+| `OPENROUTER_MODEL` | `openrouter/free` | Must be `openrouter/free` or end in `:free` unless `OPENROUTER_ALLOW_PAID=true`. |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Must be https. |
+| `OPENROUTER_ALLOW_PAID` | `false` | Explicit opt-in before any possibly-paid model is used. |
+| `OPENROUTER_TIMEOUT_MS` | `30000` | Max 60000. |
+| `APP_URL` | — | Optional, sent as `HTTP-Referer`. |
 
-## Learn More
+The key never reaches the browser, logs, prompts or committed files. `/api/status` reports only the mode and model name.
 
-To learn more about Next.js, take a look at the following resources:
+## Test
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run typecheck
+npm run lint
+npm test            # unit + route tests (Vitest)
+npm run build
+npm run test:e2e    # Playwright against the production build, live AI forced off
+npm run check       # all of the above
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy (Vercel)
 
-## Deploy on Vercel
+1. Import the repo in Vercel (framework: Next.js; defaults are fine).
+2. Project → Settings → Environment Variables: add `OPENROUTER_API_KEY` (and optionally `OPENROUTER_MODEL`) for Production/Preview. Do not prefix with `NEXT_PUBLIC_`.
+3. Deploy. Note: the API rate limiter is in-memory per instance — see ADR 0004 before relying on it for cost control.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Layout
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/lib/scene/schema.ts      Visual scene contract v1 (zod)
+src/lib/lesson/schema.ts     Lesson + step contract (zod)
+src/lib/lesson/runtime.ts    Pure playback reducer
+src/lib/engines/*            Deterministic concept engines + whiteboard fallback
+src/lib/registry.ts          Capability registry
+src/lib/ai/*                 Provider interface, OpenRouter provider, planner
+src/app/api/lesson           POST {prompt} → validated lesson
+src/components/*             Workspace, SceneRenderer (FLIP + arrows), CodePanel, controls
+docs/                        Brief, architecture, scene contract, plan, ADRs
+```

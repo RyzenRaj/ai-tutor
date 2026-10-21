@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --arrow-default: #64748b;
+  --arrow-muted: #cbd5e1;
+  --arrow-active: #0284c7;
+  --arrow-compare: #d97706;
+  --arrow-success: #059669;
+  --arrow-warning: #e11d48;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #020617;
+    --foreground: #e2e8f0;
+    --arrow-default: #94a3b8;
+    --arrow-muted: #334155;
+    --arrow-active: #38bdf8;
+    --arrow-compare: #fbbf24;
+    --arrow-success: #34d399;
+    --arrow-warning: #fb7185;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.scene-fade-in {
+  animation: scene-fade-in 400ms ease-out both;
+}
+@keyframes scene-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
