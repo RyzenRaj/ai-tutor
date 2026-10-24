@@ -139,7 +139,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
               placeholder='What should I teach? e.g. "binary search for 7 in [1, 3, 5, 7, 9]"'
               className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700"
             />
-            <button type="submit" disabled={loading || prompt.trim().length < 2} className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold whitespace-nowrap text-white hover:bg-sky-700 disabled:opacity-50">
+            <button type="submit" disabled={loading || prompt.trim().length < 2} className="rounded-lg bg-sky-700 px-4 py-1.5 text-sm font-semibold whitespace-nowrap text-white hover:bg-sky-800 disabled:opacity-50">
               {loading ? "Planning…" : "Teach me"}
             </button>
           </form>
@@ -147,7 +147,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
         </div>
         <div className="flex items-center gap-1.5">
         <div className="-mx-1 flex min-w-0 items-center gap-1.5 overflow-x-auto px-1 pb-0.5 whitespace-nowrap sm:flex-wrap sm:overflow-visible">
-          <span className="text-xs text-slate-500">Try:</span>
+          <span className="text-xs text-slate-600 dark:text-slate-400">Try:</span>
           {QUICK_PICKS.map((q) => (
             <button
               key={q.label}
@@ -290,11 +290,11 @@ function StateInspector({ state }: { state: Lesson["steps"][number]["state"] }) 
   if (entries.length === 0) return null;
   return (
     <section aria-label="Variables" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900" data-testid="state">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">State</h3>
+      <h3 className="text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400">State</h3>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-sm sm:grid-cols-3">
         {entries.map(([k, v]) => (
           <div key={k} className="flex justify-between gap-2 border-b border-dashed border-slate-200 py-0.5 dark:border-slate-800">
-            <dt className="truncate text-slate-500">{k}</dt>
+            <dt className="truncate text-slate-600 dark:text-slate-400">{k}</dt>
             <dd data-var={k} className="font-semibold">
               {v === null ? "—" : String(v)}
             </dd>

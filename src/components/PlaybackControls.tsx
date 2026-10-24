@@ -26,7 +26,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
         </button>
         <button
           type="button"
-          className={`${btn} min-w-24 border-sky-600 bg-sky-600 text-white hover:bg-sky-700 dark:hover:bg-sky-700`}
+          className={`${btn} min-w-24 border-sky-700 bg-sky-700 text-white hover:bg-sky-800 dark:hover:bg-sky-600`}
           onClick={() => dispatch({ type: "toggle" })}
           disabled={count <= 1}
           aria-label={playing ? "Pause" : "Play"}
@@ -41,7 +41,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
         <button type="button" className={btn} onClick={() => dispatch({ type: "replay" })} aria-label="Replay from start" title="Replay (R)">
           ↺ Replay
         </button>
-        <label className="ml-2 flex min-w-40 flex-1 items-center gap-2 text-xs text-slate-500">
+        <label className="ml-2 flex min-w-40 flex-1 items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
           <span className="sr-only">Jump to step</span>
           <input
             type="range"
