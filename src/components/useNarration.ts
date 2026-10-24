@@ -19,7 +19,8 @@ const SERVER_STATE: VoiceState = { status: "off", muted: false, providerId: "bro
  * Narration for the active step. Prefers the server's Kokoro voice when it is configured,
  * otherwise the browser's built-in voice; off until the learner turns it on.
  */
-export function useNarration(stepKey: string, text: string): NarrationApi {
+export function useNarration(stepKey: string, text: string, opts: { serverVoice?: boolean } = {}): NarrationApi {
+  const serverVoice = opts.serverVoice !== false;
   const kokoro = useMemo(() => new KokoroHttpProvider(), []);
   const browser = useMemo(() => new BrowserSpeechProvider(), []);
   const controller = useMemo(() => new NarrationController(browser), [browser]);
@@ -28,7 +29,7 @@ export function useNarration(stepKey: string, text: string): NarrationApi {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [k, b] = await Promise.all([kokoro.isAvailable(), browser.isAvailable()]);
+      const [k, b] = await Promise.all([serverVoice ? kokoro.isAvailable() : Promise.resolve(false), browser.isAvailable()]);
       if (cancelled) return;
       const list = [...(k ? [kokoro] : []), ...(b ? [browser] : [])];
       setProviders(list);
@@ -37,7 +38,7 @@ export function useNarration(stepKey: string, text: string): NarrationApi {
     return () => {
       cancelled = true;
     };
-  }, [controller, kokoro, browser]);
+  }, [controller, kokoro, browser, serverVoice]);
 
   useEffect(() => () => controller.dispose(), [controller]);
 

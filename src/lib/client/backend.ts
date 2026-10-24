@@ -8,6 +8,8 @@ export type PlanMetaDTO = { mode: "live" | "mock"; model?: string; intro: string
 export type PlanResultDTO = { lesson: unknown; meta: PlanMetaDTO };
 
 export interface TutorBackend {
+  /** false when there is no server (static demo): skip the server voice check entirely. */
+  serverVoice?: boolean;
   status(): Promise<TutorStatus>;
   plan(prompt: string, signal: AbortSignal): Promise<PlanResultDTO>;
 }

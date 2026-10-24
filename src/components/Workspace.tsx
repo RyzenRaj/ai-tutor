@@ -46,7 +46,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
   const abortRef = useRef<AbortController | null>(null);
 
   const step = lesson.steps[Math.min(pb.index, lesson.steps.length - 1)];
-  const narration = useNarration(`${lesson.id}:${step.id}`, step.narration);
+  const narration = useNarration(`${lesson.id}:${step.id}`, step.narration, { serverVoice: backend.serverVoice });
   const voice = narration.state;
   const voiceBusy = (voice.status === "loading" || voice.status === "playing" || voice.status === "paused") && voice.stepKey === narration.stepKey;
 
