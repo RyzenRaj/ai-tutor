@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { gotoWalkthroughStep, walkthroughStart } from "./helpers";
 
 const counter = (page: Page) => page.getByTestId("step-counter");
 // The canvas shows the active code line(s); the full code lives in the Editor tab.
@@ -18,12 +19,16 @@ test("starts on the teaching canvas with a verified binary search lesson in demo
   await expect(page.getByTestId("fidelity-badge")).toHaveText("Verified simulation");
   await expect(page.getByTestId("mode-badge")).toContainText("Demo mode");
   await expect(counter(page)).toHaveText(/^1 \/ \d+$/);
-  expect(await activeLines(page)).toEqual([2]);
+  await expect(page.getByTestId("phase")).toHaveAttribute("data-phase", "definition");
+  expect(await activeLines(page)).toEqual([1]); // the function signature, before any state exists
 });
 
-test("code, pointers, state and narration stay in sync on every step", async ({ page }) => {
+test("code, pointers, state and narration stay in sync on every walkthrough step", async ({ page }) => {
   const total = Number((await counter(page).innerText()).split("/")[1]);
-  for (let i = 0; i < total; i++) {
+  const start = await walkthroughStart(page);
+  await gotoWalkthroughStep(page, 1);
+  let i = start;
+  for (; (await page.getByTestId("canvas").getAttribute("data-phase")) === "walkthrough"; i++) {
     await expect(counter(page)).toHaveText(`${i + 1} / ${total}`);
     const lines = await activeLines(page);
     expect(lines.length).toBeGreaterThan(0);
@@ -35,17 +40,21 @@ test("code, pointers, state and narration stay in sync on every step", async ({ 
     const midText = await stateVar(page, "mid");
     if ((await page.getByTestId("pointer-mid").count()) > 0) await expect(page.getByTestId("pointer-mid")).toHaveAttribute("data-index", midText);
     if (lines.includes(4)) await expect(page.getByTestId("narration")).toContainText(`mid = (${low} + ${high}) // 2 = ${midText}`);
-    if (i < total - 1) await page.getByRole("button", { name: "Next step" }).click();
+    if (lines.includes(6)) await expect(page.getByTestId("narration")).toContainText("return index 7");
+    await page.getByRole("button", { name: "Next step" }).click();
   }
-  await expect(page.getByTestId("narration")).toContainText("return index 7");
+  expect(i).toBeGreaterThan(start + 3);
+  await page.getByRole("slider").fill(String(total));
   await expect(page.getByRole("button", { name: "Next step" })).toBeDisabled();
   await page.getByRole("button", { name: "Replay from start" }).click();
   await expect(counter(page)).toHaveText(`1 / ${total}`);
 });
 
 test("autoplay pauses at a question; answering gives feedback", async ({ page }) => {
+  await gotoWalkthroughStep(page, 1);
+  const start = await walkthroughStart(page);
   await page.getByRole("button", { name: "Play", exact: true }).click();
-  await expect(counter(page)).toHaveText(/^2 \//, { timeout: 4000 });
+  await expect(counter(page)).toHaveText(new RegExp(`^${start + 2} /`), { timeout: 4000 });
   await expect(page.getByRole("button", { name: "Play", exact: true })).toBeVisible(); // paused
   const cp = page.getByTestId("checkpoint");
   await cp.getByRole("button", { name: "Search right: low = mid + 1" }).click();
@@ -64,15 +73,16 @@ test("keyboard navigation works, but not while typing", async ({ page }) => {
 
 test("custom input is validated before visualizing", async ({ page }) => {
   await page.getByText("Your own binary search…").click();
-  await page.getByLabel("Sorted values").fill("5, 1, 3");
+  await page.getByRole("textbox", { name: "Sorted values" }).fill("5, 1, 3");
   await page.getByRole("button", { name: "Visualize" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "sorted" })).toBeVisible();
-  await page.getByLabel("Sorted values").fill("");
+  await page.getByRole("textbox", { name: "Sorted values" }).fill("");
   await page.getByRole("textbox", { name: "Target" }).fill("4");
   await page.getByRole("button", { name: "Visualize" }).click();
   await expect(page.getByTestId("lesson-title")).toHaveText("Binary search for 4");
-  await expect(counter(page)).toHaveText("1 / 2");
   await expect(page.getByTestId("scene")).toContainText("empty array");
+  await gotoWalkthroughStep(page, 2);
+  await expect(page.getByTestId("narration")).toContainText("return -1");
 });
 
 test("SQL JOIN and Spark shuffle lessons render with their own visuals", async ({ page }) => {
@@ -112,7 +122,7 @@ test("respects reduced motion", async ({ browser }) => {
 });
 
 test("the tutor points at what it is talking about", async ({ page }) => {
-  await page.getByRole("button", { name: "Next step" }).click();
+  await gotoWalkthroughStep(page, 2);
   await expect(page.getByTestId("board-title")).toHaveText("Pick the middle candidate");
   await expect(page.getByTestId("focus-ring")).toBeVisible();
   await expect(page.getByTestId("callout")).toHaveAttribute("d", /^M/);
@@ -124,17 +134,17 @@ test("the tutor points at what it is talking about", async ({ page }) => {
 });
 
 test("Editor tab is a separate view that follows the same step", async ({ page }) => {
-  await page.getByRole("button", { name: "Next step" }).click();
-  await page.getByRole("button", { name: "Next step" }).click();
+  await gotoWalkthroughStep(page, 3);
+  const n = (await walkthroughStart(page)) + 3;
   const canvasLines = await activeLines(page);
   await page.getByTestId("code-line").click(); // "open in Editor"
   await expect(page.getByRole("tab", { name: /Editor/ })).toHaveAttribute("aria-selected", "true");
   expect(await editorLines(page)).toEqual(canvasLines);
-  await expect(page.getByTestId("editor-step")).toContainText("Step 3 of");
+  await expect(page.getByTestId("editor-step")).toContainText(`Step ${n} of`);
   await page.getByRole("button", { name: "Next step" }).click();
-  await expect(page.getByTestId("editor-step")).toContainText("Step 4 of");
+  await expect(page.getByTestId("editor-step")).toContainText(`Step ${n + 1} of`);
   await page.getByRole("tab", { name: /Canvas/ }).click();
-  await expect(counter(page)).toHaveText(/^4 \//);
+  await expect(counter(page)).toHaveText(new RegExp(`^${n + 1} /`));
 });
 
 test("learner can draw, erase and zoom on the canvas", async ({ page }) => {

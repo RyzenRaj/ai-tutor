@@ -55,9 +55,9 @@ describe("Spark shuffle engine", () => {
   });
 
   it("handles a single reducer and empty partitions", () => {
-    const lesson = buildSparkShuffleLesson({ inputPartitions: [[], [{ key: "a", value: 2 }]], numReducers: 1 });
+    const lesson = buildSparkShuffleLesson({ inputPartitions: [[], [{ key: "a", value: 2 }]], numReducers: 1 }, { depth: "quick" });
     expect(lesson.steps.at(-1)!.state).toEqual({ a: 2 });
-    const none = buildSparkShuffleLesson({ inputPartitions: [[]], numReducers: 2 });
+    const none = buildSparkShuffleLesson({ inputPartitions: [[]], numReducers: 2 }, { depth: "quick" });
     expect(none.steps.at(-1)!.state).toEqual({});
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { gotoWalkthroughStep } from "./helpers";
 
 /**
  * Regression tests from docs/quality/findings-2026-10-24.md.
@@ -27,22 +28,29 @@ for (const pick of ["Binary search", "Binary search (absent)", "INNER JOIN", "LE
   });
 }
 
-// F1 — stepping must not make the board jump scale.
-for (const vp of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }]) test(`F1: zoom never increases while stepping and changes at most once (${vp.width}×${vp.height})`, async ({ page }) => {
+// F1 — stepping must not make the board jump scale. Acceptance: the zoom never increases while
+// stepping, and it only decreases on a step whose board is taller than anything shown before
+// (content that would otherwise not fit). Oscillation like 1.00 → 1.18 → 1.03 fails.
+for (const vp of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }]) test(`F1: zoom only shrinks, and only when the board grows (${vp.width}×${vp.height})`, async ({ page }) => {
   await page.setViewportSize(vp);
   await page.goto("/");
   for (const pick of ["Binary search", "LEFT JOIN", "Spark shuffle"]) {
     await page.getByRole("button", { name: pick, exact: true }).click();
     const total = await stepCount(page);
     const zooms: number[] = [];
+    const heights: number[] = [];
     for (let i = 0; i < total; i++) {
       await expect(counter(page)).toHaveText(`${i + 1} / ${total}`);
       await page.waitForTimeout(150);
       zooms.push(Number(await page.getByTestId("canvas").getAttribute("data-zoom")));
+      heights.push(await page.getByTestId("canvas").locator(":scope > div").first().evaluate((el) => (el as HTMLElement).offsetHeight));
       if (i < total - 1) await page.getByRole("button", { name: "Next step" }).click();
     }
-    for (let i = 1; i < zooms.length; i++) expect(zooms[i], `${pick}: ${zooms.join(" ")}`).toBeLessThanOrEqual(zooms[i - 1]);
-    expect(new Set(zooms).size, `${pick}: ${zooms.join(" ")}`).toBeLessThanOrEqual(2);
+    const trace = `${pick}: zoom ${zooms.join(" ")} | height ${heights.join(" ")}`;
+    for (let i = 1; i < zooms.length; i++) {
+      expect(zooms[i], trace).toBeLessThanOrEqual(zooms[i - 1]);
+      if (zooms[i] < zooms[i - 1]) expect(heights[i], trace).toBeGreaterThan(Math.max(...heights.slice(0, i)));
+    }
   }
 });
 
@@ -88,7 +96,7 @@ test.describe("F3: smooth and interruptible transitions", () => {
   });
 
   test("a pointer glides when stepping", async ({ page }) => {
-    await page.getByRole("slider").fill("3");
+    await gotoWalkthroughStep(page, 3);
     await page.waitForTimeout(800);
     const r = await sampleMaxSpeed(page, "[data-testid=pointer-low]", () => page.getByRole("button", { name: "Next step" }).click());
     expect(r.frames).toBeGreaterThan(20);
@@ -96,7 +104,7 @@ test.describe("F3: smooth and interruptible transitions", () => {
   });
 
   test("reversing mid-move continues from where the pointer is", async ({ page }) => {
-    await page.getByRole("slider").fill("3");
+    await gotoWalkthroughStep(page, 3);
     await page.waitForTimeout(800);
     const r = await sampleMaxSpeed(page, "[data-testid=pointer-low]", async () => {
       await page.getByRole("button", { name: "Next step" }).click();
@@ -109,7 +117,7 @@ test.describe("F3: smooth and interruptible transitions", () => {
 
   test("Spark records reverse smoothly across the shuffle", async ({ page }) => {
     await page.getByRole("button", { name: "Spark shuffle", exact: true }).click();
-    await page.getByRole("slider").fill("3");
+    await gotoWalkthroughStep(page, 3);
     await page.waitForTimeout(800);
     const r = await sampleMaxSpeed(page, "[data-scene-id='rec-0-0']", async () => {
       await page.getByRole("button", { name: "Next step" }).click();
@@ -120,9 +128,11 @@ test.describe("F3: smooth and interruptible transitions", () => {
   });
 
   test("rapid navigation settles on the correct, untransformed state", async ({ page }) => {
+    await gotoWalkthroughStep(page, 1);
+    await page.waitForTimeout(600);
     for (let i = 0; i < 6; i++) await page.getByRole("button", { name: "Next step" }).click({ delay: 0 });
     await page.waitForTimeout(1200);
-    await expect(page.getByTestId("step-counter")).toHaveText("7 / 7");
+    await expect(page.getByTestId("narration")).toContainText("return index 7");
     for (const name of ["low", "high", "mid"]) {
       const v = await page.locator(`[data-testid=state] dd[data-var="${name}"]`).innerText();
       await expect(page.getByTestId(`pointer-${name}`)).toHaveAttribute("data-index", v);
@@ -137,7 +147,7 @@ test.describe("F3: smooth and interruptible transitions", () => {
 
 // F4 — the tutor's ring and arrow are drawn after the focused element has arrived.
 test("F4: focus marker waits for the move to finish", async ({ page }) => {
-  await page.getByRole("slider").fill("3");
+  await gotoWalkthroughStep(page, 3);
   await page.waitForTimeout(1000);
   await page.getByRole("button", { name: "Next step" }).click(); // low pointer moves 0 → 5
   const offset = () =>

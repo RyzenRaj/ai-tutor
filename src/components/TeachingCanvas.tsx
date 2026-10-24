@@ -5,6 +5,7 @@ import type { Lesson, LessonStep } from "@/lib/lesson/schema";
 import { SceneRenderer, type FocusInfo } from "./SceneRenderer";
 import { CheckpointCard } from "./CheckpointCard";
 import { MAX_K, MIN_K, planView, type View, type ViewReason } from "@/lib/canvas/view";
+import { PHASE_LABEL } from "@/lib/teaching/sequence";
 
 /**
  * The classroom: an infinite-feeling whiteboard (pan / zoom / pinch) where the tutor
@@ -23,7 +24,19 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const pathOf = (pts: [number, number][]) =>
   pts.length === 1 ? `M${pts[0][0]},${pts[0][1]} l0.01,0` : pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
 
-export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: Lesson; step: LessonStep; index: number; onOpenEditor: () => void }) {
+export function TeachingCanvas({
+  lesson,
+  step,
+  index,
+  onOpenEditor,
+  onGoto,
+}: {
+  lesson: Lesson;
+  step: LessonStep;
+  index: number;
+  onOpenEditor: () => void;
+  onGoto?: (index: number) => void;
+}) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const sceneWrapRef = useRef<HTMLDivElement>(null);
@@ -122,10 +135,16 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
       const x2 = f.x + Math.min(f.w / 2, 120), y2 = f.y + f.h + 4;
       const below = Math.max(y1, y2) + 70;
       d = noteRight ? `M${x1},${y1} C${x1 - 60},${below} ${x2 + 60},${below} ${x2},${y2}` : `M${x1},${y1} C${x1 - 20},${(y1 + y2) / 2} ${x2 + 30},${(y1 + y2) / 2} ${x2},${y2}`;
-    } else {
+    } else if (Math.min(y1, f.y - 4) - 70 > oy) {
+      // Room above the drawing: arc over it and come down onto the target.
       const x2 = f.x + f.w / 2, y2 = f.y - 4;
       const above = Math.min(y1, y2) - 70;
       d = `M${x1},${y1} C${x1 - 80},${above} ${x2 + 60},${above} ${x2},${y2}`;
+    } else {
+      // Target sits at the top of the drawing: arc underneath instead of through the title.
+      const x2 = f.x + f.w / 2, y2 = f.y + f.h + 4;
+      const below = Math.max(y1, y2) + 70;
+      d = `M${x1},${y1} C${x1 - 80},${below} ${x2 + 60},${below} ${x2},${y2}`;
     }
     setCallout(d);
   }, [focus, step.scene.focus]);
@@ -265,12 +284,15 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
   const codeLines = lesson.code.source.split("\n");
   const shownLines = step.highlightLines.slice(0, 2);
   const stateEntries = Object.entries(step.state);
-  const verified = lesson.fidelity === "verified";
+  const verified = step.scene.fidelity === "verified";
+  const walkthroughStart = lesson.steps.findIndex((s) => s.phase === "walkthrough");
+  const inIntro = index < walkthroughStart;
 
   return (
     <div
       ref={viewportRef}
       data-testid="canvas"
+      data-phase={step.phase}
       data-zoom={view.k.toFixed(2)}
       className={`board-grid relative h-full w-full touch-none overflow-hidden select-none ${tool === "hand" ? "cursor-grab active:cursor-grabbing" : tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`}
       style={{
@@ -290,13 +312,25 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
         className={`absolute top-0 left-0 origin-top-left p-10 ${narrow ? "w-[680px]" : "w-[1220px]"}`}
         style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, transition: smooth ? `transform ${VIEW_GLIDE}` : "none" }}
       >
-        <header className="mb-8 flex items-baseline gap-4">
+        <header className="mb-8 flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span className="rounded-full bg-[var(--teacher-ink)] px-3 py-1 font-mono text-sm font-bold text-white">
             {index + 1}/{lesson.steps.length}
+          </span>
+          <span data-testid="phase" data-phase={step.phase} className="rounded-full border border-[var(--teacher-ink)] px-3 py-0.5 text-sm font-semibold tracking-wide text-[var(--teacher-ink)] uppercase">
+            {PHASE_LABEL[step.phase]}
           </span>
           <h3 className="font-hand text-4xl leading-none text-slate-800 dark:text-slate-100" data-testid="board-title">
             {step.objective}
           </h3>
+          {inIntro && onGoto && (
+            <button
+              type="button"
+              onClick={() => onGoto(walkthroughStart)}
+              className="ml-auto rounded-full px-3 py-1 text-sm font-medium text-slate-600 underline-offset-4 hover:underline dark:text-slate-300"
+            >
+              Skip to the walkthrough →
+            </button>
+          )}
         </header>
 
         <div className={`grid items-start gap-x-24 gap-y-14 ${narrow ? "grid-cols-1" : "grid-cols-[720px_340px]"}`}>
@@ -355,7 +389,7 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
         </div>
 
         <p className="mt-10 font-hand text-xl text-slate-500 dark:text-slate-400">
-          {verified ? "✓ verified simulation — every step computed by code" : "✎ illustrative sketch — not a simulation"}
+          {verified ? "✓ verified simulation — every step computed by code" : "✎ explanatory sketch — not a simulation"}
         </p>
 
         {/* Teacher's callout arrow, drawn on each step */}
@@ -439,7 +473,7 @@ function HandNote({ text }: { text: string }) {
     return () => clearInterval(id);
   }, [text]);
   return (
-    <p className="font-hand text-[26px] leading-[1.25] text-slate-800 dark:text-slate-900">
+    <p className="font-hand text-[26px] leading-[1.25] whitespace-pre-line text-slate-800 dark:text-slate-900">
       <span>{text.slice(0, n)}</span>
       <span className="opacity-0">{text.slice(n)}</span>
     </p>

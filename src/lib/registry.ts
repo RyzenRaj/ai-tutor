@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Lesson } from "@/lib/lesson/schema";
+import type { BuildOptions } from "@/lib/teaching/sequence";
 import { BinarySearchParamsSchema, buildBinarySearchLesson } from "@/lib/engines/binary-search";
 import { DEFAULT_SQL_JOIN, SqlJoinParamsSchema, buildSqlJoinLesson } from "@/lib/engines/sql-join";
 import { DEFAULT_SPARK_SHUFFLE, SparkShuffleParamsSchema, buildSparkShuffleLesson } from "@/lib/engines/spark-shuffle";
@@ -21,7 +22,7 @@ export type Capability<P = unknown> = {
   defaultParams: P;
   /** Short natural-language description of params for the LLM planner. */
   paramsHint: string;
-  build: (params: P) => Lesson;
+  build: (params: P, opts?: BuildOptions) => Lesson;
 };
 
 const defineCapability = <P>(c: Capability<P>) => c as unknown as Capability<unknown>;
@@ -79,8 +80,8 @@ export function matchCapability(topic: string): Capability<unknown> | undefined 
 }
 
 /** Validate params and build. Throws ZodError for invalid params. */
-export function buildLesson(capabilityId: string, params: unknown): Lesson {
+export function buildLesson(capabilityId: string, params: unknown, opts?: BuildOptions): Lesson {
   const cap = getCapability(capabilityId);
   if (!cap) throw new Error(`Unknown capability: ${capabilityId}`);
-  return cap.build(cap.paramsSchema.parse(params));
+  return cap.build(cap.paramsSchema.parse(params), opts);
 }

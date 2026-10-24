@@ -31,7 +31,7 @@ describe("binary search engine", () => {
   });
 
   it("handles an empty array", () => {
-    const lesson = buildBinarySearchLesson({ values: [], target: 5 });
+    const lesson = buildBinarySearchLesson({ values: [], target: 5 }, { depth: "quick" });
     expect(lesson.steps.map((s) => s.id)).toHaveLength(2);
     expect(lesson.steps.at(-1)!.state.result).toBe(-1);
     const arr = lesson.steps[0].scene.elements[0];
@@ -50,7 +50,15 @@ describe("binary search engine", () => {
     [[-5, -2, 0, 0.5, 3], 0.5, 3],
   ])("search %j for %d → %d", (values, target, expected) => {
     expect(binarySearchResult(values, target)).toBe(expected);
-    expect(buildBinarySearchLesson({ values, target }).steps.at(-1)!.state.result).toBe(expected);
+    expect(buildBinarySearchLesson({ values, target }, { depth: "quick" }).steps.at(-1)!.state.result).toBe(expected);
+  });
+
+  it("F15: builds a lesson for the largest allowed input (32 values) without exceeding id limits", () => {
+    const values = Array.from({ length: 32 }, (_, i) => i * 1000.5);
+    expect(() => buildBinarySearchLesson({ values, target: values[31] })).not.toThrow();
+    const a = buildBinarySearchLesson({ values, target: 1 });
+    const b = buildBinarySearchLesson({ values: [...values.slice(0, 31), 99999], target: 1 });
+    expect(a.id).not.toBe(b.id); // ids still distinguish inputs
   });
 
   it("rejects unsorted, oversized and non-finite input", () => {
@@ -69,7 +77,7 @@ describe("binary search engine", () => {
   it("keeps code, scene, state and checkpoints synchronized on every step", () => {
     const values = [3, 8, 12, 17, 21, 25, 30, 34, 42, 51];
     for (const target of [3, 34, 51, 20, 0, 99]) {
-      const lesson = buildBinarySearchLesson({ values, target });
+      const lesson = buildBinarySearchLesson({ values, target }, { depth: "quick" });
       expect(LessonSchema.safeParse(lesson).success).toBe(true);
       const codeLines = BINARY_SEARCH_CODE.split("\n");
       lesson.steps.forEach((step, i) => {
@@ -101,7 +109,7 @@ describe("binary search engine", () => {
   });
 
   it("moves pointers by stable ids so the renderer can animate them", () => {
-    const lesson = buildBinarySearchLesson({ values: [1, 2, 3, 4, 5, 6, 7, 8], target: 7 });
+    const lesson = buildBinarySearchLesson({ values: [1, 2, 3, 4, 5, 6, 7, 8], target: 7 }, { depth: "quick" });
     const ids = new Set(
       lesson.steps.flatMap((s) => {
         const arr = s.scene.elements[0];

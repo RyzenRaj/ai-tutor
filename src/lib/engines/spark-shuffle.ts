@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { type Lesson, type LessonStepInput, LessonSchema } from "@/lib/lesson/schema";
 import type { SceneInput as Scene, LeafElementInput as SceneElement, Tone } from "@/lib/scene/schema";
+import { SPARK_SHUFFLE_TEXT } from "@/lib/teaching/content";
+import { shortHash } from "@/lib/util/hash";
+import { boxesScene, composeSteps, numericOptions } from "@/lib/teaching/compose";
+import { analogyNarration, mergeTeaching, summaryNarration, type BuildOptions } from "@/lib/teaching/sequence";
 
 /**
  * Simplified Spark shuffle for `rdd.reduceByKey(_ + _, R)`.
@@ -91,8 +95,9 @@ export function computeShuffle(params: SparkShuffleParams) {
   return { params: p, combined, fetched, reduced };
 }
 
-export function buildSparkShuffleLesson(params: SparkShuffleParams): Lesson {
+export function buildSparkShuffleLesson(params: SparkShuffleParams, opts: BuildOptions = {}): Lesson {
   const { params: p, combined, fetched, reduced } = computeShuffle(params);
+  const text = mergeTeaching(SPARK_SHUFFLE_TEXT, opts.teaching);
   const P = p.inputPartitions.length;
   const R = p.numReducers;
   const totalRecords = p.inputPartitions.reduce((n, x) => n + x.length, 0);
@@ -239,10 +244,106 @@ export function buildSparkShuffleLesson(params: SparkShuffleParams): Lesson {
     ),
   });
 
+  // ── Intuition before mechanics ───────────────────────────────────────────────
+  const inputMaps = () =>
+    p.inputPartitions.map((recs, i) => mapContainer(i, recs.map((r, k) => ({ id: `rec-${i}-${k}`, label: `${r.key}:${r.value}`, tone: "default" as Tone })), `${recs.length} records`));
+  const distinctKeys = [...new Set(p.inputPartitions.flat().map((r) => r.key))];
+  const intro: LessonStepInput[] = [
+    {
+      id: "spark-definition",
+      phase: "definition",
+      objective: "What a shuffle is",
+      narration: text.definition,
+      highlightLines: [3],
+      state: { inputPartitions: P, reducers: R },
+      scene: scene(inputMaps(), emptyReds(), `${totalRecords} records spread over ${P} partitions`),
+    },
+    {
+      id: "spark-why",
+      phase: "why",
+      objective: "Why it matters",
+      narration: text.why,
+      highlightLines: [],
+      state: { keys: distinctKeys.length, partitions: P },
+      scene: boxesScene(
+        [
+          { id: "partial", label: "Each task: partial sums", detail: "only its own partition" },
+          { id: "move", label: "Move partials over the network", detail: "the expensive part", tone: "warning" },
+          { id: "total", label: "One task per key range", detail: "final totals", tone: "success" },
+        ],
+        { focus: "move" },
+      ),
+    },
+    {
+      id: "spark-analogy",
+      phase: "analogy",
+      objective: "Think of a post office",
+      narration: analogyNarration(text),
+      highlightLines: [],
+      state: {},
+      scene: boxesScene([
+        { id: "local", label: "Local offices", detail: "map tasks bundle by city" },
+        { id: "truck", label: "Trucks", detail: "the shuffle" },
+        { id: "city", label: "City offices", detail: "reduce tasks deliver" },
+      ]),
+    },
+    {
+      id: "spark-preview",
+      phase: "preview",
+      objective: "Where we're going",
+      narration: `Here's the start and the finish side by side: ${totalRecords} scattered records on the left become ${distinctKeys.length} totals, each key in exactly one reduce task. Next we'll follow how they get there.`,
+      highlightLines: [3, 11],
+      state: { records: totalRecords, keys: distinctKeys.length },
+      scene: scene(
+        inputMaps(),
+        reduced.map((chips, j) => redContainer(j, chips.map((c) => ({ id: `final-${c.key}`, label: `${c.key}:${c.value}`, tone: "success" as Tone })), `${chips.length} key(s)`)),
+        "Start (top) and finish (bottom)",
+        [],
+        ["stage2"],
+      ),
+    },
+  ];
+  const { options, answerIndex } = numericOptions(totalRecords, [shuffled, distinctKeys.length, R, P], totalRecords);
+  const check: LessonStepInput = {
+    id: "spark-check",
+    phase: "check",
+    objective: "Predict the cost without combining",
+    narration: `Map-side combine shrank what crossed the network to ${shuffled} record(s). Predict what happens without it, for example with groupByKey.`,
+    highlightLines: [4],
+    state: { recordsShuffled: shuffled, records: totalRecords },
+    scene: scene(
+      combined.map((chips, i) => mapContainer(i, chips.map((c) => ({ id: c.id, label: `${c.key}:${c.value}`, tone: "compare" as Tone })), `${chips.length} partial result(s)`)),
+      emptyReds(),
+      "After map-side combine",
+    ),
+    checkpoint: {
+      prompt: "Without map-side combine, how many records would have to cross the network?",
+      options,
+      answerIndex,
+      explanation: `Every one of the ${totalRecords} input records would be shuffled, instead of ${shuffled} partial results.`,
+    },
+  };
+  const summary: LessonStepInput = {
+    id: "spark-summary",
+    phase: "summary",
+    objective: "Summary",
+    narration: summaryNarration(text),
+    highlightLines: SPARK_CODE(P, R).split("\n").map((_, i) => i + 1),
+    state: {},
+    scene: boxesScene(
+      [
+        { id: "insight", label: "Key insight", detail: "equal keys must meet", tone: "success" },
+        { id: "when", label: "When to use", detail: "combine before shuffling", tone: "active" },
+        { id: "mistake", label: "Common mistake", detail: "ignoring skew", tone: "warning" },
+      ],
+      { chain: false },
+    ),
+  };
+
   // Every engine output passes the same contract validation as model output.
   return LessonSchema.parse({
     schemaVersion: 1,
-    id: `spark-shuffle:${P}:${R}:${totalRecords}`,
+    id: `spark-shuffle:${shortHash(JSON.stringify(p))}${opts.depth === "quick" ? ":quick" : ""}`,
     capabilityId: "spark-shuffle",
     title: "Spark shuffle: reduceByKey",
     summary: `Follow ${totalRecords} records through map-side combine, hash partitioning and the shuffle into ${R} reduce task(s).`,
@@ -253,6 +354,8 @@ export function buildSparkShuffleLesson(params: SparkShuffleParams): Lesson {
       "Ignores spill-to-disk, shuffle file format, executor placement, retries, adaptive query execution and skew handling.",
     ],
     code: { language: "scala", source: SPARK_CODE(P, R) },
-    steps,
+    depth: opts.depth ?? "full",
+    teaching: text,
+    steps: composeSteps({ intro, walkthrough: steps, check, summary }, opts.depth),
   });
 }

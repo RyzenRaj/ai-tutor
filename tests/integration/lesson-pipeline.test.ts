@@ -28,11 +28,11 @@ function assertSynchronized(lesson: Lesson) {
   const lines = lesson.code.source.split("\n");
   for (const [i, step] of lesson.steps.entries()) {
     const where = `${lesson.capabilityId} step ${i + 1} (${step.objective})`;
-    expect(step.highlightLines.length, where).toBeGreaterThan(0);
+    if (step.phase === "walkthrough") expect(step.highlightLines.length, where).toBeGreaterThan(0);
     for (const l of step.highlightLines) expect(lines[l - 1]?.trim(), `${where}: line ${l}`).toBeTruthy();
     const ids = new Set(collectIds(step.scene.elements));
     for (const f of step.scene.focus) expect(ids.has(f), `${where}: focus ${f}`).toBe(true);
-    expect(step.scene.fidelity, where).toBe(lesson.fidelity);
+    if (step.phase === "walkthrough" || step.phase === "preview" || step.phase === "check") expect(step.scene.fidelity, where).toBe(lesson.fidelity);
     if (step.checkpoint) expect(step.checkpoint.answerIndex, where).toBeLessThan(step.checkpoint.options.length);
   }
 }

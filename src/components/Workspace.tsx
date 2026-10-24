@@ -10,6 +10,7 @@ import { DEFAULT_SQL_JOIN } from "@/lib/engines/sql-join";
 import { CodePanel } from "./CodePanel";
 import { TeachingCanvas } from "./TeachingCanvas";
 import { httpBackend, type TutorBackend, type TutorStatus } from "@/lib/client/backend";
+import { PHASE_LABEL } from "@/lib/teaching/sequence";
 import { PlaybackControls } from "./PlaybackControls";
 
 type Source =
@@ -123,7 +124,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
   }
 
   return (
-    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden" data-walkthrough-start={lesson.steps.findIndex((s) => s.phase === "walkthrough")}>
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-4 dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="mr-2 hidden text-base font-bold tracking-tight whitespace-nowrap sm:block">AI Visual Tutor</h1>
@@ -187,7 +188,14 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
 
       <main className="relative min-h-0 flex-1">
         {view === "canvas" ? (
-          <TeachingCanvas key={lesson.id} lesson={lesson} step={step} index={pb.index} onOpenEditor={() => setView("editor")} />
+          <TeachingCanvas
+            key={lesson.id}
+            lesson={lesson}
+            step={step}
+            index={pb.index}
+            onOpenEditor={() => setView("editor")}
+            onGoto={(i) => dispatch({ type: "goto", index: i })}
+          />
         ) : (
           <EditorView lesson={lesson} step={step} index={pb.index} onOpenCanvas={() => setView("canvas")} />
         )}
@@ -213,7 +221,7 @@ function EditorView({ lesson, step, index, onOpenCanvas }: { lesson: Lesson; ste
       <aside className="flex min-h-0 flex-col gap-3 overflow-auto">
         <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900" data-testid="editor-step">
           <p className="text-xs font-semibold tracking-wide text-sky-700 uppercase dark:text-sky-300">
-            Step {index + 1} of {lesson.steps.length} · {step.objective}
+            Step {index + 1} of {lesson.steps.length} · {PHASE_LABEL[step.phase]} · {step.objective}
           </p>
           <p className="mt-2 leading-relaxed">{step.narration}</p>
           <button type="button" onClick={onOpenCanvas} className="mt-3 text-xs font-semibold text-sky-700 hover:underline dark:text-sky-300">

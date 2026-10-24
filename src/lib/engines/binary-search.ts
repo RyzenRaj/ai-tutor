@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { type Lesson, type LessonStepInput, LessonSchema } from "@/lib/lesson/schema";
 import type { SceneInput as Scene, Tone } from "@/lib/scene/schema";
+import { BINARY_SEARCH_TEXT } from "@/lib/teaching/content";
+import { shortHash } from "@/lib/util/hash";
+import { boxesScene, composeSteps, numericOptions } from "@/lib/teaching/compose";
+import { analogyNarration, mergeTeaching, summaryNarration, type BuildOptions } from "@/lib/teaching/sequence";
 
 /** Deterministic binary search engine: computes every state; the model never does. */
 
@@ -174,9 +178,27 @@ function narrate(values: readonly number[], target: number, e: TraceEvent): { ob
 
 const CHECK_OPTIONS = ["Found it — return mid", "Search right: low = mid + 1", "Search left: high = mid - 1"];
 
-export function buildBinarySearchLesson(params: BinarySearchParams): Lesson {
+/** Worst-case comparisons for n sorted values with this midpoint rule: floor(log2 n) + 1. */
+export function maxComparisons(n: number): number {
+  return n <= 0 ? 0 : Math.floor(Math.log2(n)) + 1;
+}
+
+export function buildBinarySearchLesson(params: BinarySearchParams, opts: BuildOptions = {}): Lesson {
   const { values, target } = BinarySearchParamsSchema.parse(params);
   const events = traceBinarySearch(values, target);
+  const text = mergeTeaching(BINARY_SEARCH_TEXT, opts.teaching);
+  const n = values.length;
+  const allLines = BINARY_SEARCH_CODE.split("\n").map((_, i) => i + 1);
+  const plainArray = (title = "sorted values"): Scene => ({
+    version: 1,
+    fidelity: "verified",
+    layout: "column",
+    focus: ["arr"],
+    elements: [
+      { type: "array", id: "arr", title: `${title} (target = ${target})`, cells: values.map((v, i) => ({ id: `cell-${i}`, value: v })), pointers: [] },
+      { type: "text", id: "status", text: n === 0 ? "No values at all." : `${n} values, smallest ${values[0]}, largest ${values[n - 1]}.` },
+    ],
+  });
   const steps: LessonStepInput[] = events.map((e, i) => {
     const { objective, narration } = narrate(values, target, e);
     const mid = "mid" in e ? e.mid : null;
@@ -213,11 +235,113 @@ export function buildBinarySearchLesson(params: BinarySearchParams): Lesson {
     return step;
   });
 
+  // ── Intuition before mechanics ───────────────────────────────────────────────
+  const firstCompare = events.find((e) => e.kind === "compare");
+  const preview: Scene = (() => {
+    if (!firstCompare || firstCompare.kind !== "compare") return plainArray();
+    const m = firstCompare.mid;
+    const discard = (i: number) => (firstCompare.relation === "lt" ? i <= m : firstCompare.relation === "gt" ? i >= m : false);
+    return {
+      version: 1,
+      fidelity: "verified",
+      layout: "column",
+      focus: [`cell-${m}`],
+      elements: [
+        {
+          type: "array",
+          id: "arr",
+          title: `first look (target = ${target})`,
+          cells: values.map((v, i) => ({ id: `cell-${i}`, value: v, tone: i === m ? (firstCompare.relation === "eq" ? "success" : "compare") : discard(i) ? "muted" : "default" })),
+          pointers: [{ id: "ptr-mid", label: "mid", index: m, tone: "compare" }],
+        },
+        { type: "text", id: "status", text: "Greyed-out values are ruled out by one comparison." },
+      ],
+    };
+  })();
+  const previewNarration = (() => {
+    if (!firstCompare || firstCompare.kind !== "compare") return `There is nothing to search here: the array is empty, so the answer will be -1 straight away.`;
+    const m = firstCompare.mid;
+    const v = values[m];
+    if (firstCompare.relation === "eq") return `Here's the idea in one move: look at the middle value, ${v}. It is the target, so we'd be done after a single comparison.`;
+    const ruledOut = firstCompare.relation === "lt" ? m + 1 : n - m;
+    return `Here's the idea in one move: look at the middle value, ${v}. Since ${v} ${firstCompare.relation === "lt" ? "<" : ">"} ${target}, ${ruledOut} of the ${n} values are ruled out at once. Now let's watch it step by step, with the code.`;
+  })();
+  const intro: LessonStepInput[] = [
+    { id: "bs-definition", phase: "definition", objective: "What binary search does", narration: text.definition, highlightLines: [1], state: { values: n, target }, scene: plainArray() },
+    {
+      id: "bs-why",
+      phase: "why",
+      objective: "Why it matters",
+      narration: text.why,
+      highlightLines: [],
+      state: { values: n, "one by one (worst)": n, "binary search (worst)": maxComparisons(n) },
+      scene: boxesScene(
+        [
+          { id: "linear", label: "Check one by one", detail: `up to ${n} comparisons here`, tone: "warning" },
+          { id: "halve", label: "Halve each time", detail: `at most ${maxComparisons(n)} comparisons here`, tone: "success" },
+        ],
+        { focus: "halve", chain: false, note: "For 1,000,000 sorted values: up to 1,000,000 checks one by one, at most 20 with binary search." },
+      ),
+    },
+    {
+      id: "bs-analogy",
+      phase: "analogy",
+      objective: "Think of a dictionary",
+      narration: analogyNarration(text),
+      highlightLines: [],
+      state: {},
+      scene: boxesScene([
+        { id: "open", label: "Open in the middle", detail: "e.g. at 'M'" },
+        { id: "decide", label: "Before or after?", detail: "compare with your word" },
+        { id: "keep", label: "Keep that half", detail: "repeat until found" },
+      ]),
+    },
+    { id: "bs-preview", phase: "preview", objective: "The idea in one move", narration: previewNarration, highlightLines: [4, 5], state: { values: n, target }, scene: preview },
+  ];
+
+  const worst = maxComparisons(n);
+  const { options, answerIndex } = numericOptions(worst, [n, Math.ceil(n / 2), worst * 2, worst - 1], n);
+  const check: LessonStepInput | null =
+    n === 0
+      ? null
+      : {
+          id: "bs-check",
+          phase: "check",
+          objective: "Predict the worst case",
+          narration: `One more prediction before we wrap up. Think about the slowest possible search on these ${n} values.`,
+          highlightLines: [3],
+          state: { values: n },
+          scene: plainArray(),
+          checkpoint: {
+            prompt: `With ${n} sorted values, what is the most comparisons binary search can ever need?`,
+            options,
+            answerIndex,
+            explanation: `Each comparison halves the range, so ${n} values need at most ⌊log₂ ${n}⌋ + 1 = ${worst} comparisons, whatever the target.`,
+          },
+        };
+  const summary: LessonStepInput = {
+    id: "bs-summary",
+    phase: "summary",
+    objective: "Summary",
+    narration: summaryNarration(text),
+    highlightLines: allLines,
+    state: {},
+    scene: boxesScene(
+      [
+        { id: "insight", label: "Key insight", detail: "halve the range each step", tone: "success" },
+        { id: "when", label: "When to use", detail: "sorted data, random access", tone: "active" },
+        { id: "mistake", label: "Common mistake", detail: "mixing loop styles", tone: "warning" },
+      ],
+      { chain: false },
+    ),
+  };
+
   const result = binarySearchResult(values, target);
   // Every engine output passes the same contract validation as model output.
   return LessonSchema.parse({
     schemaVersion: 1,
-    id: `binary-search:${values.join(",")}:${target}`,
+    // Bounded id (F15): a hash of the input instead of the raw values.
+    id: `binary-search:${shortHash(values.join(","))}:${n}:${String(target).slice(0, 20)}${opts.depth === "quick" ? ":quick" : ""}`,
     capabilityId: "binary-search",
     title: `Binary search for ${target}`,
     summary:
@@ -227,6 +351,8 @@ export function buildBinarySearchLesson(params: BinarySearchParams): Lesson {
     fidelity: "verified",
     assumptions: ["Integer division (//) rounds down, so mid favours the left element in even-sized ranges."],
     code: { language: "python", source: BINARY_SEARCH_CODE },
-    steps,
+    depth: opts.depth ?? "full",
+    teaching: text,
+    steps: composeSteps({ intro, walkthrough: steps, check, summary }, opts.depth),
   });
 }

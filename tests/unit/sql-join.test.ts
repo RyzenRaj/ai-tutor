@@ -43,7 +43,7 @@ describe("SQL JOIN engine", () => {
       [1, "x"],
       [1, "y"],
     ]);
-    const empty = buildSqlJoinLesson({ ...DEFAULT_SQL_JOIN, right: { ...DEFAULT_SQL_JOIN.right, rows: [] } });
+    const empty = buildSqlJoinLesson({ ...DEFAULT_SQL_JOIN, right: { ...DEFAULT_SQL_JOIN.right, rows: [] } }, { depth: "quick" });
     expect(empty.steps.at(-1)!.state.outputRows).toBe(0);
     expect(empty.steps.every((s) => !s.checkpoint)).toBe(true);
   });
@@ -57,7 +57,7 @@ describe("SQL JOIN engine", () => {
   it("final scene output table equals the computed result, and checkpoints are correct", () => {
     for (const joinType of ["INNER", "LEFT"] as const) {
       const params = { ...DEFAULT_SQL_JOIN, joinType };
-      const lesson = buildSqlJoinLesson(params);
+      const lesson = buildSqlJoinLesson(params, { depth: "quick" });
       const out = computeJoin(params);
       const last = lesson.steps.at(-1)!.scene.elements.find((e) => e.id === "out");
       expect(last?.type === "table" && last.rows.map((r) => r.cells)).toEqual(out.rows);
