@@ -9,6 +9,7 @@ import { BinarySearchParamsSchema } from "@/lib/engines/binary-search";
 import { DEFAULT_SQL_JOIN } from "@/lib/engines/sql-join";
 import { CodePanel } from "./CodePanel";
 import { TeachingCanvas } from "./TeachingCanvas";
+import { httpBackend, type TutorBackend, type TutorStatus } from "@/lib/client/backend";
 import { PlaybackControls } from "./PlaybackControls";
 
 type Source =
@@ -17,7 +18,7 @@ type Source =
   | { kind: "mock"; intro: string; notices: string[] }
   | { kind: "live"; model?: string; intro: string; notices: string[] };
 
-type Status = { mode: "live"; model: string } | { mode: "mock"; configError?: string } | null;
+type Status = TutorStatus | null;
 
 const AUTOPLAY_MS = 1800;
 
@@ -29,7 +30,7 @@ const QUICK_PICKS: { label: string; build: () => Lesson }[] = [
   { label: "Spark shuffle", build: () => buildLesson("spark-shuffle", getCapability("spark-shuffle")!.defaultParams) },
 ];
 
-export function Workspace({ initialLesson }: { initialLesson: Lesson }) {
+export function Workspace({ initialLesson, backend = httpBackend }: { initialLesson: Lesson; backend?: TutorBackend }) {
   const [lesson, setLesson] = useState(initialLesson);
   const [source, setSource] = useState<Source>({ kind: "builtin" });
   const [pb, dispatch] = useReducer(playbackReducer, initialLesson.steps.length, initPlayback);
@@ -52,14 +53,14 @@ export function Workspace({ initialLesson }: { initialLesson: Lesson }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/status")
-      .then((r) => r.json())
-      .then((s: Status) => !cancelled && setStatus(s))
+    backend
+      .status()
+      .then((s) => !cancelled && setStatus(s))
       .catch(() => !cancelled && setStatus({ mode: "mock" }));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [backend]);
 
   // Autoplay: one timer per step. When autoplay *arrives* at a question it pauses,
   // so the learner can answer; pressing Play on a question step continues.
@@ -108,17 +109,10 @@ export function Workspace({ initialLesson }: { initialLesson: Lesson }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/lesson", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text }),
-        signal: ac.signal,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      const data = await backend.plan(text, ac.signal);
       const parsed = LessonSchema.safeParse(data.lesson); // never trust the network either
       if (!parsed.success) throw new Error("The server returned a lesson that failed validation.");
-      const meta = data.meta as { mode: "live" | "mock"; model?: string; intro: string; notices: string[] };
+      const meta = data.meta;
       loadLesson(parsed.data, meta.mode === "live" ? { kind: "live", model: meta.model, intro: meta.intro, notices: meta.notices } : { kind: "mock", intro: meta.intro, notices: meta.notices });
     } catch (err) {
       setError(ac.signal.aborted ? "The tutor took too long to answer. Try again." : err instanceof Error ? err.message : "Something went wrong.");

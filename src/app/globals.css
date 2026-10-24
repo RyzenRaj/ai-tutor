@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* Tailwind's dark: variant honours both the OS setting and an explicit data-theme. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+}
+
 @theme inline {
   --font-hand: var(--font-caveat), "Segoe Print", "Bradley Hand", cursive;
 }
@@ -19,8 +31,9 @@
   --note: #fef3a0;
 }
 
+/* Dark theme follows the OS unless the host forces a theme with data-theme. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #020617;
     --foreground: #e2e8f0;
     --arrow-default: #94a3b8;
@@ -33,7 +46,23 @@
     --board-dot: #2a3644;
     --teacher-ink: #f472b6;
     --note: #fde68a;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --arrow-default: #94a3b8;
+  --arrow-muted: #334155;
+  --arrow-active: #38bdf8;
+  --arrow-compare: #fbbf24;
+  --arrow-success: #34d399;
+  --arrow-warning: #fb7185;
+  --board: #0f1720;
+  --board-dot: #2a3644;
+  --teacher-ink: #f472b6;
+  --note: #fde68a;
+  color-scheme: dark;
 }
 
 body {

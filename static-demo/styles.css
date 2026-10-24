@@ -1,0 +1,15 @@
+@import "../src/app/globals.css";
+@source "../src";
+
+:root {
+  --font-caveat: "Caveat";
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+/* The app shell uses 100dvh; inside the artifact frame it should fill the padded root instead. */
+#root > div {
+  height: 100% !important;
+}

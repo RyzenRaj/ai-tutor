@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e"
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e",
+    "build:demo": "node scripts/build-static-demo.mjs"
   },
   "dependencies": {
     "next": "16.4.2",
@@ -22,10 +23,12 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
+    "@tailwindcss/cli": "^4.3.3",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.25.12",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",

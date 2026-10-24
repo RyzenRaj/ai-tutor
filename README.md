@@ -11,6 +11,10 @@ Status: binary search, SQL JOIN (INNER/LEFT) and a simplified Spark shuffle work
 
 ## Run locally
 
+**Windows, easiest:** double-click `start.cmd`. It installs packages on the first run, starts the app and opens http://localhost:3000.
+
+Or from a terminal:
+
 ```bash
 npm install
 cp .env.example .env.local   # optional — add OPENROUTER_API_KEY for live AI
@@ -32,6 +36,10 @@ Canvas: drag to pan (hand tool), scroll to pan, Ctrl/⌘ + scroll or pinch to zo
 | `APP_URL` | — | Optional, sent as `HTTP-Referer`. |
 
 The key never reaches the browser, logs, prompts or committed files. `/api/status` reports only the mode and model name.
+
+## No-server demo build
+
+`npm run build:demo` writes `dist-demo/ai-visual-tutor.html`: the same app as one file, demo mode only (no API routes, no model calls; React loads from cdnjs). Useful for sharing a preview.
 
 ## Test
 
