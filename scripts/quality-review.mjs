@@ -28,6 +28,10 @@ await page.getByTestId("lesson-title").waitFor();
 
 const next = () => page.getByRole("button", { name: "Next step" }).click();
 const prev = () => page.getByRole("button", { name: "Previous step" }).click();
+const walkStep = async (k) => {
+  const start = Number(await page.locator("[data-walkthrough-start]").getAttribute("data-walkthrough-start"));
+  await page.getByRole("slider").fill(String(start + k)); // k-th walkthrough step (after the intro)
+};
 const total = async () => Number((await page.getByTestId("step-counter").innerText()).split("/")[1]);
 
 async function maxSpeed(selector, act, ms = 1300) {
@@ -68,13 +72,13 @@ for (const pick of ["Binary search", "INNER JOIN", "LEFT JOIN", "Spark shuffle"]
 }
 
 await page.getByRole("button", { name: "Binary search", exact: true }).click();
-await page.getByRole("slider").fill("3");
+await walkStep(3);
 await page.waitForTimeout(800);
 report.motion["pointer, normal step (px/ms)"] = await maxSpeed("[data-testid=pointer-low]", next);
-await page.getByRole("slider").fill("3");
+await walkStep(3);
 await page.waitForTimeout(800);
 report.motion["pointer, reversed mid-move (px/ms)"] = await maxSpeed("[data-testid=pointer-low]", async () => { await next(); await page.waitForTimeout(150); await prev(); });
-await page.getByRole("slider").fill("1");
+await walkStep(1);
 await page.waitForTimeout(800);
 report.motion["pointer, 6 rapid nexts (px/ms)"] = await maxSpeed("[data-testid=pointer-low]", async () => { for (let i = 0; i < 6; i++) await next(); });
 report.motion.note = "Smooth moves stay below ~3 px/ms; > 4 px/ms in one frame is a teleport.";
