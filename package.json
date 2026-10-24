@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e",
-    "build:demo": "node scripts/build-static-demo.mjs"
+    "build:demo": "node scripts/build-static-demo.mjs",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "review:browser": "node scripts/quality-review.mjs"
   },
   "dependencies": {
     "next": "16.4.2",
