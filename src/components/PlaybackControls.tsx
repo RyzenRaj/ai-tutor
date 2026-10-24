@@ -1,6 +1,6 @@
 "use client";
 
-import type { Dispatch } from "react";
+import type { Dispatch, ReactNode } from "react";
 import type { PlaybackAction } from "@/lib/lesson/runtime";
 
 type Props = {
@@ -10,12 +10,13 @@ type Props = {
   pauseAtQuestions: boolean;
   onPauseAtQuestions: (v: boolean) => void;
   dispatch: Dispatch<PlaybackAction>;
+  children?: ReactNode;
 };
 
 const btn =
   "inline-flex h-10 min-w-10 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-sky-500 dark:border-slate-700 dark:hover:bg-slate-800";
 
-export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPauseAtQuestions, dispatch }: Props) {
+export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPauseAtQuestions, dispatch, children }: Props) {
   const atStart = index === 0;
   const atEnd = index >= count - 1;
   return (
@@ -60,6 +61,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
           <input type="checkbox" checked={pauseAtQuestions} onChange={(e) => onPauseAtQuestions(e.target.checked)} />
           Pause at questions
         </label>
+        {children}
       </div>
     </nav>
   );

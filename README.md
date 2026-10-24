@@ -34,8 +34,29 @@ Canvas: drag to pan (hand tool), scroll to pan, Ctrl/⌘ + scroll or pinch to zo
 | `OPENROUTER_ALLOW_PAID` | `false` | Explicit opt-in before any possibly-paid model is used. |
 | `OPENROUTER_TIMEOUT_MS` | `30000` | Max 60000. |
 | `APP_URL` | — | Optional, sent as `HTTP-Referer`. |
+| `RATE_LIMIT_PER_MINUTE` | `10` | Lesson requests per client per minute (per instance). |
+| `LIVE_AI_MAX_PER_MINUTE` | `30` | Global cap on live model calls per instance. |
+| `TRUST_PROXY_FORWARDED_FOR` | `false` | Only behind a proxy you control that rewrites `X-Forwarded-For`. |
+| `KOKORO_TTS_URL` | — | Self-hosted OpenAI-compatible speech endpoint (https, or http for localhost). Empty → browser voice only. |
+| `KOKORO_TTS_VOICE` / `KOKORO_TTS_MODEL` | `af_heart` / `kokoro` | Voice and model sent upstream. |
+| `KOKORO_TTS_API_KEY` | — | Optional bearer token for the TTS server. |
 
 The key never reaches the browser, logs, prompts or committed files. `/api/status` reports only the mode and model name.
+
+## Voice narration (optional)
+
+Turn on **🔈 Voice** in the playback bar to have each step read aloud. It is off by default and the lesson works fully without it.
+
+- **Browser voice** works out of the box (Web Speech API; quality depends on your OS voices).
+- **Kokoro voice** (free, open-weight) needs a Kokoro server you run yourself, e.g. [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI):
+
+  ```bash
+  docker run -p 8880:8880 ghcr.io/remsky/kokoro-fastapi-cpu:latest   # pin a release tag in practice
+  # .env.local
+  KOKORO_TTS_URL=http://localhost:8880
+  ```
+
+  The app proxies through `/api/tts`, so the URL (and optional `KOKORO_TTS_API_KEY`) never reach the browser. Audio isn't stored. See ADR 0006 for why Kokoro doesn't run inside Vercel Functions or the browser yet.
 
 ## No-server demo build
 
@@ -46,10 +67,11 @@ The key never reaches the browser, logs, prompts or committed files. `/api/statu
 ```bash
 npm run typecheck
 npm run lint
-npm test            # unit + route tests (Vitest)
+npm test            # unit + integration (Vitest); or test:unit / test:integration
 npm run build
 npm run test:e2e    # Playwright against the production build, live AI forced off
 npm run check       # all of the above
+REVIEW_URL=http://localhost:3000 npm run review:browser   # quality-review evidence (see docs/quality)
 ```
 
 ## Deploy (Vercel)

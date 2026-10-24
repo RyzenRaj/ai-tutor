@@ -12,6 +12,8 @@ import { TeachingCanvas } from "./TeachingCanvas";
 import { httpBackend, type TutorBackend, type TutorStatus } from "@/lib/client/backend";
 import { PHASE_LABEL } from "@/lib/teaching/sequence";
 import { PlaybackControls } from "./PlaybackControls";
+import { VoiceControls } from "./VoiceControls";
+import { useNarration } from "./useNarration";
 
 type Source =
   | { kind: "builtin" }
@@ -44,6 +46,9 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
   const abortRef = useRef<AbortController | null>(null);
 
   const step = lesson.steps[Math.min(pb.index, lesson.steps.length - 1)];
+  const narration = useNarration(`${lesson.id}:${step.id}`, step.narration);
+  const voice = narration.state;
+  const voiceBusy = (voice.status === "loading" || voice.status === "playing" || voice.status === "paused") && voice.stepKey === narration.stepKey;
 
   const loadLesson = useCallback((next: Lesson, src: Source) => {
     setLesson(next);
@@ -74,12 +79,26 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
       dispatch({ type: "pause" });
       return;
     }
+    // With narration on, wait until the step has been read aloud before moving on.
+    if (voiceBusy) return;
+    const spoken = voice.status !== "off" && voice.finishedStepKey === narration.stepKey;
     const t = setTimeout(() => {
       arrivedByTick.current = true;
       dispatch({ type: "tick" });
-    }, AUTOPLAY_MS);
+    }, spoken ? 600 : AUTOPLAY_MS);
     return () => clearTimeout(t);
-  }, [pb.playing, pb.index, pauseAtQuestions, step.checkpoint]);
+  }, [pb.playing, pb.index, pauseAtQuestions, step.checkpoint, voiceBusy, voice.status, voice.finishedStepKey, narration.stepKey]);
+
+  // A hidden tab pauses playback and narration, so nothing advances or speaks unseen (F14).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      dispatch({ type: "pause" });
+      narration.controller.pause();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [narration.controller]);
 
   // Keyboard: ← → navigate, Space play/pause, Home/R replay. Ignored while typing.
   useEffect(() => {
@@ -208,7 +227,9 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
         pauseAtQuestions={pauseAtQuestions}
         onPauseAtQuestions={setPauseAtQuestions}
         dispatch={dispatch}
-      />
+      >
+        <VoiceControls narration={narration} />
+      </PlaybackControls>
     </div>
   );
 }
