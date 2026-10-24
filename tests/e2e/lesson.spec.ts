@@ -159,6 +159,7 @@ test("learner can draw, erase and zoom on the canvas", async ({ page }) => {
   await expect(page.getByTestId("zoom-level")).not.toHaveText(before);
   await page.getByRole("button", { name: "Fit board to screen" }).click();
   await expect(page.getByTestId("zoom-level")).toHaveText(before);
+  await page.waitForTimeout(400); // fit glides (320 ms); measure after it settles
 
   // Hand tool pans the board.
   await page.getByRole("button", { name: "Move board" }).click();

@@ -16,7 +16,8 @@ export default defineConfig({
     // Runs the production build with live AI disabled, so E2E is deterministic.
     command: `npm run start -- -p ${PORT}`,
     url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // Reusing a server can silently test a stale build; opt in with PW_REUSE_SERVER=1.
+    reuseExistingServer: process.env.PW_REUSE_SERVER === "1",
     env: { OPENROUTER_API_KEY: "" },
     timeout: 60_000,
   },
