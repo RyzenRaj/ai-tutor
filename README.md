@@ -2,7 +2,7 @@
 
 A teaching **canvas**: pick (or ask for) a technical concept and the tutor teaches it on a whiteboard — drawing the concept, writing each explanation as a note, circling what it's talking about, asking check-yourself questions, and animating every step. The full code lives in a separate **Editor** tab. Canvas and editor follow the **same active lesson step**.
 
-Status: binary search, SQL JOIN (INNER/LEFT) and a simplified Spark shuffle work end to end as **verified simulations**; other topics get an **illustrative whiteboard**. OpenRouter is wired behind a provider interface; without a key the app runs in a clearly labeled demo mode. Auth/persistence is planned, not built. See [`docs/implementation-plan.md`](docs/implementation-plan.md).
+Status: binary search, SQL JOIN (INNER/LEFT) and a simplified Spark shuffle work end to end as **verified simulations**, each taught as definition → why → analogy → preview → walkthrough → check → summary; other topics get an **illustrative whiteboard**. Optional voice narration (browser voice, or a self-hosted Kokoro server). OpenRouter is wired behind a provider interface; without a key the app runs in a clearly labeled demo mode. Auth/persistence is planned, not built. See [`docs/implementation-plan.md`](docs/implementation-plan.md), [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/deployment.md`](docs/deployment.md).
 
 ## Requirements
 
