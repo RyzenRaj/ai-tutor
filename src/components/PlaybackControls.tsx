@@ -1,6 +1,6 @@
 "use client";
 
-import type { Dispatch } from "react";
+import type { Dispatch, ReactNode } from "react";
 import type { PlaybackAction } from "@/lib/lesson/runtime";
 
 type Props = {
@@ -10,12 +10,13 @@ type Props = {
   pauseAtQuestions: boolean;
   onPauseAtQuestions: (v: boolean) => void;
   dispatch: Dispatch<PlaybackAction>;
+  children?: ReactNode;
 };
 
 const btn =
   "inline-flex h-10 min-w-10 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-sky-500 dark:border-slate-700 dark:hover:bg-slate-800";
 
-export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPauseAtQuestions, dispatch }: Props) {
+export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPauseAtQuestions, dispatch, children }: Props) {
   const atStart = index === 0;
   const atEnd = index >= count - 1;
   return (
@@ -26,7 +27,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
         </button>
         <button
           type="button"
-          className={`${btn} min-w-24 border-sky-600 bg-sky-600 text-white hover:bg-sky-700 dark:hover:bg-sky-700`}
+          className={`${btn} min-w-24 border-sky-700 bg-sky-700 text-white hover:bg-sky-800 dark:hover:bg-sky-600`}
           onClick={() => dispatch({ type: "toggle" })}
           disabled={count <= 1}
           aria-label={playing ? "Pause" : "Play"}
@@ -41,7 +42,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
         <button type="button" className={btn} onClick={() => dispatch({ type: "replay" })} aria-label="Replay from start" title="Replay (R)">
           ↺ Replay
         </button>
-        <label className="ml-2 flex min-w-40 flex-1 items-center gap-2 text-xs text-slate-500">
+        <label className="ml-2 flex min-w-40 flex-1 items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
           <span className="sr-only">Jump to step</span>
           <input
             type="range"
@@ -60,6 +61,7 @@ export function PlaybackControls({ index, count, playing, pauseAtQuestions, onPa
           <input type="checkbox" checked={pauseAtQuestions} onChange={(e) => onPauseAtQuestions(e.target.checked)} />
           Pause at questions
         </label>
+        {children}
       </div>
     </nav>
   );

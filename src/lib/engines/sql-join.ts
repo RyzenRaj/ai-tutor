@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { type Lesson, type LessonStepInput, LessonSchema } from "@/lib/lesson/schema";
 import type { SceneInput as Scene, LeafElementInput as SceneElement, Tone } from "@/lib/scene/schema";
+import { SQL_JOIN_TEXT } from "@/lib/teaching/content";
+import { shortHash } from "@/lib/util/hash";
+import { boxesScene, composeSteps, numericOptions } from "@/lib/teaching/compose";
+import { analogyNarration, mergeTeaching, summaryNarration, type BuildOptions } from "@/lib/teaching/sequence";
 
 /** Deterministic SQL JOIN engine (INNER / LEFT) with SQL NULL semantics. */
 
@@ -104,8 +108,9 @@ export function sqlFor(p: SqlJoinParams): string {
 
 const fmt = (v: Value) => (v === null ? "NULL" : typeof v === "string" ? `'${v}'` : String(v));
 
-export function buildSqlJoinLesson(params: SqlJoinParams): Lesson {
+export function buildSqlJoinLesson(params: SqlJoinParams, opts: BuildOptions = {}): Lesson {
   const p = SqlJoinParamsSchema.parse(params);
+  const text = mergeTeaching(SQL_JOIN_TEXT, opts.teaching);
   const out = computeJoin(p);
   const li = p.left.columns.indexOf(p.leftKey);
   const { l, r } = alias(p);
@@ -116,6 +121,7 @@ export function buildSqlJoinLesson(params: SqlJoinParams): Lesson {
     outRows: number;
     newOut?: number[];
     caption: string;
+    allMatches?: boolean;
   }): Scene => {
     const matches = opts.activeLeft !== undefined ? out.matches[opts.activeLeft] : [];
     const leftTable: SceneElement = {
@@ -168,9 +174,11 @@ export function buildSqlJoinLesson(params: SqlJoinParams): Lesson {
         outTable,
         { type: "text", id: "caption", text: opts.caption },
       ],
-      arrows: opts.compared
-        ? matches.map((j) => ({ id: `m-${opts.activeLeft}-${j}`, from: `l-${opts.activeLeft}`, to: `r-${j}`, label: "match", tone: "success" as Tone }))
-        : [],
+      arrows: opts.allMatches
+        ? out.matches.flatMap((ms, i) => ms.map((j) => ({ id: `m-${i}-${j}`, from: `l-${i}`, to: `r-${j}`, tone: "success" as Tone })))
+        : opts.compared
+          ? matches.map((j) => ({ id: `m-${opts.activeLeft}-${j}`, from: `l-${opts.activeLeft}`, to: `r-${j}`, label: "match", tone: "success" as Tone }))
+          : [],
     };
   };
 
@@ -250,9 +258,97 @@ export function buildSqlJoinLesson(params: SqlJoinParams): Lesson {
   });
 
   // Every engine output passes the same contract validation as model output.
+  // ── Intuition before mechanics ───────────────────────────────────────────────
+  const other = p.joinType === "INNER" ? "LEFT" : "INNER";
+  const otherCount = computeJoin({ ...p, joinType: other }).rows.length;
+  const intro: LessonStepInput[] = [
+    {
+      id: "join-definition",
+      phase: "definition",
+      objective: "What a JOIN does",
+      narration: text.definition,
+      highlightLines: [3, 4],
+      state: { joinType: p.joinType },
+      scene: scene({ outRows: 0, caption: `Two tables, linked by ${p.leftKey}` }),
+    },
+    {
+      id: "join-why",
+      phase: "why",
+      objective: "Why it matters",
+      narration: text.why,
+      highlightLines: [],
+      state: {},
+      scene: boxesScene(
+        [
+          { id: "left", label: p.left.name, detail: `stores ${p.leftKey}` },
+          { id: "right", label: p.right.name, detail: `${p.rightKey} → ${p.right.columns.filter((c) => c !== p.rightKey).join(", ") || "details"}` },
+          { id: "joined", label: "query result", detail: "both, side by side", tone: "success" },
+        ],
+        { focus: "joined" },
+      ),
+    },
+    {
+      id: "join-analogy",
+      phase: "analogy",
+      objective: "Think of a seating chart",
+      narration: analogyNarration(text),
+      highlightLines: [],
+      state: {},
+      scene: boxesScene([
+        { id: "guest", label: "Guest's table number", detail: "a left row's key" },
+        { id: "chart", label: "Chart entries with that number", detail: "matching right rows" },
+        { id: "card", label: "One seat card per match", detail: "one result row each" },
+      ]),
+    },
+    {
+      id: "join-preview",
+      phase: "preview",
+      objective: "Where we're going",
+      narration: `Here's the finished result first: ${out.rows.length} row(s) from ${p.left.rows.length} ${p.left.name} row(s). Each arrow is one match. Next we'll build it row by row, the way the query defines it.`,
+      highlightLines: [1],
+      state: { joinType: p.joinType, outputRows: out.rows.length },
+      scene: { ...scene({ outRows: out.rows.length, caption: "The finished result, with every match drawn", allMatches: true }), focus: ["out"] },
+    },
+  ];
+  const { options, answerIndex } = numericOptions(otherCount, [out.rows.length, p.left.rows.length, p.right.rows.length, p.left.rows.length * p.right.rows.length], p.left.rows.length + p.right.rows.length);
+  const check: LessonStepInput = {
+    id: "join-check",
+    phase: "check",
+    objective: "Predict the other join",
+    narration: `You've seen the ${p.joinType} JOIN. Now predict what changes if the query used ${other} JOIN instead.`,
+    highlightLines: [3],
+    state: { joinType: p.joinType, outputRows: out.rows.length },
+    scene: scene({ outRows: out.rows.length, caption: `${p.joinType} JOIN result` }),
+    checkpoint: {
+      prompt: `How many rows would a ${other} JOIN of these same tables return?`,
+      options,
+      answerIndex,
+      explanation:
+        other === "LEFT"
+          ? `LEFT JOIN keeps the ${out.rows.length} matched row(s) and adds every ${p.left.name} row that found no partner: ${otherCount} in total.`
+          : `INNER JOIN drops the ${p.left.name} rows without a partner, leaving ${otherCount}.`,
+    },
+  };
+  const summary: LessonStepInput = {
+    id: "join-summary",
+    phase: "summary",
+    objective: "Summary",
+    narration: summaryNarration(text),
+    highlightLines: [1, 2, 3, 4],
+    state: {},
+    scene: boxesScene(
+      [
+        { id: "insight", label: "Key insight", detail: "pair rows on a condition", tone: "success" },
+        { id: "when", label: "When to use", detail: "INNER vs LEFT", tone: "active" },
+        { id: "mistake", label: "Common mistake", detail: "WHERE after LEFT JOIN", tone: "warning" },
+      ],
+      { chain: false },
+    ),
+  };
+
   return LessonSchema.parse({
     schemaVersion: 1,
-    id: `sql-join:${p.joinType}:${p.left.name}:${p.right.name}`,
+    id: `sql-join:${p.joinType}:${shortHash(JSON.stringify(p))}${opts.depth === "quick" ? ":quick" : ""}`,
     capabilityId: "sql-join",
     title: `SQL ${p.joinType} JOIN`,
     summary: `See how ${p.joinType} JOIN combines ${p.left.name} and ${p.right.name} on ${p.leftKey} = ${p.rightKey}, row by row.`,
@@ -261,6 +357,8 @@ export function buildSqlJoinLesson(params: SqlJoinParams): Lesson {
       "Shown as a nested-loop comparison for clarity. Real databases may use hash or merge joins; the result rows are the same, though row order may differ without ORDER BY.",
     ],
     code: { language: "sql", source: sqlFor(p) },
-    steps,
+    depth: opts.depth ?? "full",
+    teaching: text,
+    steps: composeSteps({ intro, walkthrough: steps, check, summary }, opts.depth),
   });
 }

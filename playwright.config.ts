@@ -16,8 +16,10 @@ export default defineConfig({
     // Runs the production build with live AI disabled, so E2E is deterministic.
     command: `npm run start -- -p ${PORT}`,
     url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    env: { OPENROUTER_API_KEY: "" },
+    // Reusing a server can silently test a stale build; opt in with PW_REUSE_SERVER=1.
+    reuseExistingServer: process.env.PW_REUSE_SERVER === "1",
+    // Live AI off (deterministic fixtures); E2E shares one anonymous rate-limit bucket, so raise it.
+    env: { OPENROUTER_API_KEY: "", RATE_LIMIT_PER_MINUTE: "1000" },
     timeout: 60_000,
   },
 });

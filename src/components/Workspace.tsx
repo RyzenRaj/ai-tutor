@@ -10,7 +10,10 @@ import { DEFAULT_SQL_JOIN } from "@/lib/engines/sql-join";
 import { CodePanel } from "./CodePanel";
 import { TeachingCanvas } from "./TeachingCanvas";
 import { httpBackend, type TutorBackend, type TutorStatus } from "@/lib/client/backend";
+import { PHASE_LABEL } from "@/lib/teaching/sequence";
 import { PlaybackControls } from "./PlaybackControls";
+import { VoiceControls } from "./VoiceControls";
+import { useNarration } from "./useNarration";
 
 type Source =
   | { kind: "builtin" }
@@ -43,6 +46,9 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
   const abortRef = useRef<AbortController | null>(null);
 
   const step = lesson.steps[Math.min(pb.index, lesson.steps.length - 1)];
+  const narration = useNarration(`${lesson.id}:${step.id}`, step.narration, { serverVoice: backend.serverVoice });
+  const voice = narration.state;
+  const voiceBusy = (voice.status === "loading" || voice.status === "playing" || voice.status === "paused") && voice.stepKey === narration.stepKey;
 
   const loadLesson = useCallback((next: Lesson, src: Source) => {
     setLesson(next);
@@ -73,12 +79,26 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
       dispatch({ type: "pause" });
       return;
     }
+    // With narration on, wait until the step has been read aloud before moving on.
+    if (voiceBusy) return;
+    const spoken = voice.status !== "off" && voice.finishedStepKey === narration.stepKey;
     const t = setTimeout(() => {
       arrivedByTick.current = true;
       dispatch({ type: "tick" });
-    }, AUTOPLAY_MS);
+    }, spoken ? 600 : AUTOPLAY_MS);
     return () => clearTimeout(t);
-  }, [pb.playing, pb.index, pauseAtQuestions, step.checkpoint]);
+  }, [pb.playing, pb.index, pauseAtQuestions, step.checkpoint, voiceBusy, voice.status, voice.finishedStepKey, narration.stepKey]);
+
+  // A hidden tab pauses playback and narration, so nothing advances or speaks unseen (F14).
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      dispatch({ type: "pause" });
+      narration.controller.pause();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [narration.controller]);
 
   // Keyboard: ← → navigate, Space play/pause, Home/R replay. Ignored while typing.
   useEffect(() => {
@@ -123,7 +143,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
   }
 
   return (
-    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex h-dvh min-h-0 w-full flex-col overflow-hidden" data-walkthrough-start={lesson.steps.findIndex((s) => s.phase === "walkthrough")}>
       <header className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-4 dark:border-slate-800 dark:bg-slate-950">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="mr-2 hidden text-base font-bold tracking-tight whitespace-nowrap sm:block">AI Visual Tutor</h1>
@@ -139,7 +159,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
               placeholder='What should I teach? e.g. "binary search for 7 in [1, 3, 5, 7, 9]"'
               className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-slate-700"
             />
-            <button type="submit" disabled={loading || prompt.trim().length < 2} className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold whitespace-nowrap text-white hover:bg-sky-700 disabled:opacity-50">
+            <button type="submit" disabled={loading || prompt.trim().length < 2} className="rounded-lg bg-sky-700 px-4 py-1.5 text-sm font-semibold whitespace-nowrap text-white hover:bg-sky-800 disabled:opacity-50">
               {loading ? "Planning…" : "Teach me"}
             </button>
           </form>
@@ -147,7 +167,7 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
         </div>
         <div className="flex items-center gap-1.5">
         <div className="-mx-1 flex min-w-0 items-center gap-1.5 overflow-x-auto px-1 pb-0.5 whitespace-nowrap sm:flex-wrap sm:overflow-visible">
-          <span className="text-xs text-slate-500">Try:</span>
+          <span className="text-xs text-slate-600 dark:text-slate-400">Try:</span>
           {QUICK_PICKS.map((q) => (
             <button
               key={q.label}
@@ -187,7 +207,14 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
 
       <main className="relative min-h-0 flex-1">
         {view === "canvas" ? (
-          <TeachingCanvas key={lesson.id} lesson={lesson} step={step} index={pb.index} onOpenEditor={() => setView("editor")} />
+          <TeachingCanvas
+            key={lesson.id}
+            lesson={lesson}
+            step={step}
+            index={pb.index}
+            onOpenEditor={() => setView("editor")}
+            onGoto={(i) => dispatch({ type: "goto", index: i })}
+          />
         ) : (
           <EditorView lesson={lesson} step={step} index={pb.index} onOpenCanvas={() => setView("canvas")} />
         )}
@@ -200,7 +227,9 @@ export function Workspace({ initialLesson, backend = httpBackend }: { initialLes
         pauseAtQuestions={pauseAtQuestions}
         onPauseAtQuestions={setPauseAtQuestions}
         dispatch={dispatch}
-      />
+      >
+        <VoiceControls narration={narration} />
+      </PlaybackControls>
     </div>
   );
 }
@@ -213,7 +242,7 @@ function EditorView({ lesson, step, index, onOpenCanvas }: { lesson: Lesson; ste
       <aside className="flex min-h-0 flex-col gap-3 overflow-auto">
         <section className="rounded-xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900" data-testid="editor-step">
           <p className="text-xs font-semibold tracking-wide text-sky-700 uppercase dark:text-sky-300">
-            Step {index + 1} of {lesson.steps.length} · {step.objective}
+            Step {index + 1} of {lesson.steps.length} · {PHASE_LABEL[step.phase]} · {step.objective}
           </p>
           <p className="mt-2 leading-relaxed">{step.narration}</p>
           <button type="button" onClick={onOpenCanvas} className="mt-3 text-xs font-semibold text-sky-700 hover:underline dark:text-sky-300">
@@ -290,11 +319,11 @@ function StateInspector({ state }: { state: Lesson["steps"][number]["state"] }) 
   if (entries.length === 0) return null;
   return (
     <section aria-label="Variables" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900" data-testid="state">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">State</h3>
+      <h3 className="text-xs font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-400">State</h3>
       <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-sm sm:grid-cols-3">
         {entries.map(([k, v]) => (
           <div key={k} className="flex justify-between gap-2 border-b border-dashed border-slate-200 py-0.5 dark:border-slate-800">
-            <dt className="truncate text-slate-500">{k}</dt>
+            <dt className="truncate text-slate-600 dark:text-slate-400">{k}</dt>
             <dd data-var={k} className="font-semibold">
               {v === null ? "—" : String(v)}
             </dd>

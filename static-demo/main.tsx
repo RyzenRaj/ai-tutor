@@ -9,6 +9,7 @@ import { planMock } from "@/lib/ai/planner";
 import type { TutorBackend } from "@/lib/client/backend";
 
 const demoBackend: TutorBackend = {
+  serverVoice: false, // no /api/tts in the static demo; browser voice only
   async status() {
     return { mode: "mock" };
   },

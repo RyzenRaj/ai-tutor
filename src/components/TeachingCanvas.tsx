@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Lesson, LessonStep } from "@/lib/lesson/schema";
-import { SceneRenderer, type LocalRect } from "./SceneRenderer";
+import { SceneRenderer, type FocusInfo } from "./SceneRenderer";
 import { CheckpointCard } from "./CheckpointCard";
+import { MAX_K, MIN_K, planView, type View, type ViewReason } from "@/lib/canvas/view";
+import { PHASE_LABEL } from "@/lib/teaching/sequence";
 
 /**
  * The classroom: an infinite-feeling whiteboard (pan / zoom / pinch) where the tutor
@@ -14,10 +16,7 @@ import { CheckpointCard } from "./CheckpointCard";
 
 type Tool = "hand" | "pen" | "highlighter" | "eraser";
 type Stroke = { id: number; tool: "pen" | "highlighter"; color: string; d: string; points: [number, number][] };
-type View = { x: number; y: number; k: number };
-
-const MIN_K = 0.3;
-const MAX_K = 2.5;
+const VIEW_GLIDE = "320ms cubic-bezier(.2,.8,.2,1)";
 const TOOLBAR_CLEARANCE = 56; // keep the board title clear of the floating toolbar
 const PEN_COLORS = ["#e11d48", "#2563eb", "#0f172a"];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -25,18 +24,32 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const pathOf = (pts: [number, number][]) =>
   pts.length === 1 ? `M${pts[0][0]},${pts[0][1]} l0.01,0` : pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
 
-export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: Lesson; step: LessonStep; index: number; onOpenEditor: () => void }) {
+export function TeachingCanvas({
+  lesson,
+  step,
+  index,
+  onOpenEditor,
+  onGoto,
+}: {
+  lesson: Lesson;
+  step: LessonStep;
+  index: number;
+  onOpenEditor: () => void;
+  onGoto?: (index: number) => void;
+}) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const sceneWrapRef = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLDivElement>(null);
 
   const [view, setView] = useState<View>({ x: 0, y: 0, k: 1 });
+  /** true while a programmatic view change (fit, zoom buttons) should glide; false for direct manipulation. */
+  const [smooth, setSmooth] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [tool, setTool] = useState<Tool>("hand");
   const [color, setColor] = useState(PEN_COLORS[0]);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [focusRect, setFocusRect] = useState<LocalRect | null>(null);
+  const [focus, setFocus] = useState<FocusInfo | null>(null);
   const [callout, setCallout] = useState<string | null>(null);
   const userMoved = useRef(false);
   const viewRef = useRef(view);
@@ -44,48 +57,60 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
     viewRef.current = view;
   }, [view]);
 
-  // ── Fit the board to the viewport ────────────────────────────────────────────
-  const fit = useCallback((onlyShrink: boolean) => {
+  // ── Fit the board to the viewport (decisions live in lib/canvas/view.ts) ──────
+  const refit = useCallback((reason: ViewReason, animate: boolean) => {
     const vp = viewportRef.current;
     const w = worldRef.current;
     if (!vp || !w) return;
     const vw = vp.clientWidth;
-    const vh = vp.clientHeight;
-    const W = w.offsetWidth;
-    const H = w.offsetHeight;
-    const isNarrow = vw < 820;
-    // Fit the width; shrink for height only down to 85% of that, so text stays readable
-    // (anything taller can be panned to).
-    const widthFit = vw / W;
-    const k = clamp(isNarrow ? widthFit : Math.min(1.2, widthFit, Math.max((vh - TOOLBAR_CLEARANCE) / H, 0.85 * widthFit)), MIN_K, MAX_K);
-    setView((v) => {
-      if (onlyShrink && k >= v.k - 0.001) return v;
-      return { k, x: (vw - W * k) / 2, y: isNarrow ? TOOLBAR_CLEARANCE : Math.max(TOOLBAR_CLEARANCE, (vh - H * k) / 2) };
+    const next = planView({
+      viewport: { w: vw, h: vp.clientHeight },
+      content: { w: w.offsetWidth, h: w.offsetHeight },
+      narrow: vw < 820,
+      toolbar: TOOLBAR_CLEARANCE,
+      current: viewRef.current,
+      reason,
     });
+    if (!next) return;
+    viewRef.current = next;
+    setSmooth(animate);
+    setView(next);
   }, []);
 
   useLayoutEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
+    refit("load", false);
     const ro = new ResizeObserver(() => {
       setNarrow(vp.clientWidth < 820);
-      if (!userMoved.current) fit(false);
+      if (!userMoved.current) refit("resize", false);
     });
     ro.observe(vp);
     return () => ro.disconnect();
-  }, [fit]);
+  }, [refit]);
 
-  // New step: keep the user's view if they moved; otherwise only zoom out if the board grew.
+  // Switching between wide and narrow layouts changes the board size: refit.
   useLayoutEffect(() => {
-    if (!userMoved.current) fit(index === 0);
-  }, [index, narrow, fit]);
+    if (!userMoved.current) refit("resize", false);
+  }, [narrow, refit]);
+
+  // New step: keep the scale; only zoom out (smoothly) if the board no longer fits.
+  const firstStep = useRef(true);
+  useLayoutEffect(() => {
+    if (firstStep.current) {
+      firstStep.current = false;
+      return;
+    }
+    if (!userMoved.current) refit("step", true);
+  }, [index, refit]);
 
   // ── Teacher's arrow from the note to the focused element ────────────────────
   const measureCallout = useCallback(() => {
     const world = worldRef.current;
     const wrap = sceneWrapRef.current;
     const note = noteRef.current;
-    if (!world || !wrap || !note || !focusRect) return setCallout(null);
+    if (!world || !wrap || !note || !focus) return setCallout(null);
+    const focusRect = focus.rect;
     const wb = world.getBoundingClientRect();
     const k = wb.width / (world.offsetWidth || 1) || 1;
     const sb = wrap.getBoundingClientRect();
@@ -110,13 +135,19 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
       const x2 = f.x + Math.min(f.w / 2, 120), y2 = f.y + f.h + 4;
       const below = Math.max(y1, y2) + 70;
       d = noteRight ? `M${x1},${y1} C${x1 - 60},${below} ${x2 + 60},${below} ${x2},${y2}` : `M${x1},${y1} C${x1 - 20},${(y1 + y2) / 2} ${x2 + 30},${(y1 + y2) / 2} ${x2},${y2}`;
-    } else {
+    } else if (Math.min(y1, f.y - 4) - 70 > oy) {
+      // Room above the drawing: arc over it and come down onto the target.
       const x2 = f.x + f.w / 2, y2 = f.y - 4;
       const above = Math.min(y1, y2) - 70;
       d = `M${x1},${y1} C${x1 - 80},${above} ${x2 + 60},${above} ${x2},${y2}`;
+    } else {
+      // Target sits at the top of the drawing: arc underneath instead of through the title.
+      const x2 = f.x + f.w / 2, y2 = f.y + f.h + 4;
+      const below = Math.max(y1, y2) + 70;
+      d = `M${x1},${y1} C${x1 - 80},${below} ${x2 + 60},${below} ${x2},${y2}`;
     }
     setCallout(d);
-  }, [focusRect, step.scene.focus]);
+  }, [focus, step.scene.focus]);
 
   useLayoutEffect(() => {
     measureCallout();
@@ -138,8 +169,9 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
     return [(clientX - vp.left - v.x) / v.k, (clientY - vp.top - v.y) / v.k];
   };
 
-  const zoomAt = useCallback((cx: number, cy: number, factor: number) => {
+  const zoomAt = useCallback((cx: number, cy: number, factor: number, animate = false) => {
     userMoved.current = true;
+    setSmooth(animate);
     setView((v) => {
       const k = clamp(v.k * factor, MIN_K, MAX_K);
       return { k, x: cx - (cx - v.x) * (k / v.k), y: cy - (cy - v.y) * (k / v.k) };
@@ -189,6 +221,7 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
       g.dist = dist;
     } else if (g.kind === "pan") {
       userMoved.current = true;
+      setSmooth(false);
       setView((v) => ({ ...v, x: v.x + e.clientX - prev.x, y: v.y + e.clientY - prev.y }));
     } else if (g.kind === "erase") {
       erase(toWorld(e.clientX, e.clientY));
@@ -221,6 +254,7 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
       if (e.ctrlKey || e.metaKey) zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.01));
       else {
         userMoved.current = true;
+        setSmooth(false);
         setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
       }
     };
@@ -236,29 +270,36 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const vp = viewportRef.current;
       if (!vp) return;
-      if (e.key === "+" || e.key === "=") zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1.2);
-      else if (e.key === "-") zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1 / 1.2);
+      if (e.key === "+" || e.key === "=") zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1.2, true);
+      else if (e.key === "-") zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, 1 / 1.2, true);
       else if (e.key === "0") {
         userMoved.current = false;
-        fit(false);
+        refit("load", true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomAt, fit]);
+  }, [zoomAt, refit]);
 
   const codeLines = lesson.code.source.split("\n");
   const shownLines = step.highlightLines.slice(0, 2);
   const stateEntries = Object.entries(step.state);
-  const verified = lesson.fidelity === "verified";
+  const verified = step.scene.fidelity === "verified";
+  const walkthroughStart = lesson.steps.findIndex((s) => s.phase === "walkthrough");
+  const inIntro = index < walkthroughStart;
 
   return (
     <div
       ref={viewportRef}
       data-testid="canvas"
+      data-phase={step.phase}
       data-zoom={view.k.toFixed(2)}
       className={`board-grid relative h-full w-full touch-none overflow-hidden select-none ${tool === "hand" ? "cursor-grab active:cursor-grabbing" : tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`}
-      style={{ backgroundPosition: `${view.x}px ${view.y}px`, backgroundSize: `${24 * view.k}px ${24 * view.k}px` }}
+      style={{
+        backgroundPosition: `${view.x}px ${view.y}px`,
+        backgroundSize: `${24 * view.k}px ${24 * view.k}px`,
+        transition: smooth ? `background-position ${VIEW_GLIDE}, background-size ${VIEW_GLIDE}` : "none",
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -269,20 +310,32 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
       <div
         ref={worldRef}
         className={`absolute top-0 left-0 origin-top-left p-10 ${narrow ? "w-[680px]" : "w-[1220px]"}`}
-        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})`, transition: smooth ? `transform ${VIEW_GLIDE}` : "none" }}
       >
-        <header className="mb-8 flex items-baseline gap-4">
+        <header className="mb-8 flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span className="rounded-full bg-[var(--teacher-ink)] px-3 py-1 font-mono text-sm font-bold text-white">
             {index + 1}/{lesson.steps.length}
+          </span>
+          <span data-testid="phase" data-phase={step.phase} className="rounded-full border border-[var(--teacher-ink)] px-3 py-0.5 text-sm font-semibold tracking-wide text-[var(--teacher-ink)] uppercase">
+            {PHASE_LABEL[step.phase]}
           </span>
           <h3 className="font-hand text-4xl leading-none text-slate-800 dark:text-slate-100" data-testid="board-title">
             {step.objective}
           </h3>
+          {inIntro && onGoto && (
+            <button
+              type="button"
+              onClick={() => onGoto(walkthroughStart)}
+              className="ml-auto rounded-full px-3 py-1 text-sm font-medium text-slate-600 underline-offset-4 hover:underline dark:text-slate-300"
+            >
+              Skip to the walkthrough →
+            </button>
+          )}
         </header>
 
         <div className={`grid items-start gap-x-24 gap-y-14 ${narrow ? "grid-cols-1" : "grid-cols-[720px_340px]"}`}>
           <div ref={sceneWrapRef} className="min-w-0">
-            <SceneRenderer scene={step.scene} onFocusRect={setFocusRect} />
+            <SceneRenderer scene={step.scene} onFocusRect={setFocus} />
           </div>
 
           <div className="flex flex-col gap-6">
@@ -336,7 +389,7 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
         </div>
 
         <p className="mt-10 font-hand text-xl text-slate-500 dark:text-slate-400">
-          {verified ? "✓ verified simulation — every step computed by code" : "✎ illustrative sketch — not a simulation"}
+          {verified ? "✓ verified simulation — every step computed by code" : "✎ explanatory sketch — not a simulation"}
         </p>
 
         {/* Teacher's callout arrow, drawn on each step */}
@@ -358,6 +411,7 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
               markerEnd="url(#teacher-head)"
               pathLength={1}
               className="draw-on"
+              style={{ animationDelay: `${150 + (focus?.settleMs ?? 0)}ms` }}
             />
           )}
         </svg>
@@ -390,11 +444,11 @@ export function TeachingCanvas({ lesson, step, index, onOpenEditor }: { lesson: 
         onClear={() => setStrokes([])}
         onZoom={(f) => {
           const vp = viewportRef.current!;
-          zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, f);
+          zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, f, true);
         }}
         onFit={() => {
           userMoved.current = false;
-          fit(false);
+          refit("load", true);
         }}
       />
     </div>
@@ -419,7 +473,7 @@ function HandNote({ text }: { text: string }) {
     return () => clearInterval(id);
   }, [text]);
   return (
-    <p className="font-hand text-[26px] leading-[1.25] text-slate-800 dark:text-slate-900">
+    <p className="font-hand text-[26px] leading-[1.25] whitespace-pre-line text-slate-800 dark:text-slate-900">
       <span>{text.slice(0, n)}</span>
       <span className="opacity-0">{text.slice(n)}</span>
     </p>

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OpenRouterProvider, isFreeModel, readOpenRouterConfig, type OpenRouterConfig } from "@/lib/ai/openrouter";
 import { type JsonRequest, type LLMProvider, ProviderError, parseJsonText } from "@/lib/ai/provider";
 import { extractBinarySearchParams, planJsonSchema, planLive, planMock, sanitizePrompt } from "@/lib/ai/planner";
-import { matchCapability } from "@/lib/registry";
+import { buildLesson, getCapability, matchCapability } from "@/lib/registry";
 
 const cfg = (over: Partial<OpenRouterConfig> = {}): OpenRouterConfig => ({
   apiKey: "sk-or-test-SECRET",
@@ -134,7 +134,7 @@ describe("planner", () => {
     const r = planMock("binary search for 7 in [9, 1, 7, 3]");
     expect(r.meta.mode).toBe("mock");
     expect(r.lesson.capabilityId).toBe("binary-search");
-    expect(r.lesson.steps.at(-1)!.state.result).toBe(2);
+    expect(r.lesson.steps.filter((s) => s.phase === "walkthrough").at(-1)!.state.result).toBe(2);
     expect(r.meta.notices.join(" ")).toMatch(/sorted/);
     expect(extractBinarySearchParams("binary search please")).toBeNull();
   });
@@ -153,14 +153,14 @@ describe("planner", () => {
     const p = new FakeProvider([{ capabilityId: "binary-search", params: { values: [2, 4, 6], target: 6 }, intro: "Let's go" }]);
     const r = await planLive(p, "binary search");
     expect(r.meta).toMatchObject({ mode: "live", model: "fake/free:free", intro: "Let's go", notices: [] });
-    expect(r.lesson.steps.at(-1)!.state.result).toBe(2);
+    expect(r.lesson.steps.filter((s) => s.phase === "walkthrough").at(-1)!.state.result).toBe(2);
   });
 
   it("live: invalid params never reach the engine — falls back to the example with a notice", async () => {
     const p = new FakeProvider([{ capabilityId: "binary-search", params: { values: [5, 1], target: 1 }, intro: "x" }]);
     const r = await planLive(p, "binary search");
     expect(r.meta.notices[0]).toMatch(/failed validation/);
-    expect(r.lesson.id).toBe("binary-search:3,8,12,17,21,25,30,34,42,51:34");
+    expect(r.lesson.id).toBe(buildLesson("binary-search", getCapability("binary-search")!.defaultParams).id);
   });
 
   it("live: whiteboard plans become illustrative lessons; bad arrows are dropped", async () => {

@@ -37,7 +37,7 @@ export function CodePanel({ code, highlight, tall = false }: { code: CodeArtifac
               aria-current={on ? "step" : undefined}
               className={`flex border-l-4 pr-4 transition-colors duration-300 ${on ? "border-amber-400 bg-amber-400/15" : "border-transparent"}`}
             >
-              <span className="w-10 shrink-0 select-none pr-3 text-right text-slate-500">{n}</span>
+              <span className="w-10 shrink-0 select-none pr-3 text-right text-slate-400">{n}</span>
               <code className="whitespace-pre">{line || " "}</code>
             </li>
           );
